@@ -2,26 +2,28 @@ use axum::{
     Router,
     extract::{Json, Path, State},
     http::StatusCode,
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use entity::party::{self, Entity as Party};
 use entity::user::{self, Entity as User};
 use entity::user_party::{self, Entity as UserParty};
 use sea_orm::{
-    prelude::DateTime, ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set, TransactionTrait
+    ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set, TransactionTrait,
+    prelude::DateTime,
 };
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
+use utoipa::ToSchema;
 
 use crate::db::AppState;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct CreatePartyRequest {
     name: String,
     owner_id: i32,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct PartyResponse {
     id: i32,
     name: String,
@@ -42,10 +44,15 @@ impl From<party::Model> for PartyResponse {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct JoinPartyRequest {
     code: String,
     user_id: i32,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct UpdatePartyRequest {
+    name: Option<String>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -53,11 +60,24 @@ pub fn router() -> Router<AppState> {
         .route("/parties", get(list_parties))
         .route("/parties", post(create_party))
         .route("/parties/:id", get(get_party))
+        .route("/parties/:id", post(update_party))
+        .route("/parties/:id", delete(delete_party))
         .route("/parties/:id/members", get(get_party_members))
+        .route("/parties/:id/leave", post(leave_party))
         .route("/parties/join", post(join_party))
 }
 
-async fn list_parties(
+/// List all parties
+#[utoipa::path(
+    get,
+    path = "/api/parties",
+    tag = "parties",
+    responses(
+        (status = 200, description = "List of parties retrieved successfully", body = Vec<PartyResponse>),
+        (status = 500, description = "Internal server error", body = String)
+    )
+)]
+pub async fn list_parties(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<PartyResponse>>, (StatusCode, String)> {
     let db = &state.conn;
@@ -71,7 +91,21 @@ async fn list_parties(
     Ok(Json(parties.into_iter().map(PartyResponse::from).collect()))
 }
 
-async fn get_party(
+/// Get a party by ID
+#[utoipa::path(
+    get,
+    path = "/api/parties/{id}",
+    tag = "parties",
+    params(
+        ("id" = i32, Path, description = "Party ID")
+    ),
+    responses(
+        (status = 200, description = "Party found", body = PartyResponse),
+        (status = 404, description = "Party not found", body = String),
+        (status = 500, description = "Internal server error", body = String)
+    )
+)]
+pub async fn get_party(
     State(state): State<AppState>,
     Path(id): Path<i32>,
 ) -> Result<Json<PartyResponse>, (StatusCode, String)> {
@@ -89,7 +123,21 @@ async fn get_party(
     Ok(Json(party.into()))
 }
 
-async fn get_party_members(
+/// Get members of a party
+#[utoipa::path(
+    get,
+    path = "/api/parties/{party_id}/members",
+    tag = "parties",
+    params(
+        ("party_id" = i32, Path, description = "Party ID")
+    ),
+    responses(
+        (status = 200, description = "Party members retrieved successfully"),
+        (status = 404, description = "Party not found", body = String),
+        (status = 500, description = "Internal server error", body = String)
+    )
+)]
+pub async fn get_party_members(
     State(state): State<AppState>,
     Path(party_id): Path<i32>,
 ) -> Result<Json<Vec<user::Model>>, (StatusCode, String)> {
@@ -130,7 +178,19 @@ fn generate_party_code() -> String {
     format!("{:06X}", timestamp % 0xFFFFFF).to_uppercase()
 }
 
-async fn create_party(
+/// Create a new party
+#[utoipa::path(
+    post,
+    path = "/api/parties",
+    tag = "parties",
+    request_body = CreatePartyRequest,
+    responses(
+        (status = 200, description = "Party created successfully", body = PartyResponse),
+        (status = 400, description = "Invalid request", body = String),
+        (status = 500, description = "Internal server error", body = String)
+    )
+)]
+pub async fn create_party(
     State(state): State<AppState>,
     Json(payload): Json<CreatePartyRequest>,
 ) -> Result<Json<PartyResponse>, (StatusCode, String)> {
@@ -188,7 +248,20 @@ async fn create_party(
     Ok(Json(party.into()))
 }
 
-async fn join_party(
+/// Join an existing party
+#[utoipa::path(
+    post,
+    path = "/api/parties/join",
+    tag = "parties",
+    request_body = JoinPartyRequest,
+    responses(
+        (status = 200, description = "Successfully joined party", body = PartyResponse),
+        (status = 400, description = "Invalid request or already a member", body = String),
+        (status = 404, description = "Party not found", body = String),
+        (status = 500, description = "Internal server error", body = String)
+    )
+)]
+pub async fn join_party(
     State(state): State<AppState>,
     Json(payload): Json<JoinPartyRequest>,
 ) -> Result<Json<PartyResponse>, (StatusCode, String)> {
@@ -240,4 +313,167 @@ async fn join_party(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     Ok(Json(party.into()))
+}
+
+/// Update party information
+#[utoipa::path(
+    post,
+    path = "/api/parties/{id}",
+    tag = "parties",
+    params(
+        ("id" = i32, Path, description = "Party ID")
+    ),
+    request_body = UpdatePartyRequest,
+    responses(
+        (status = 200, description = "Party updated successfully", body = PartyResponse),
+        (status = 404, description = "Party not found", body = String),
+        (status = 500, description = "Internal server error", body = String)
+    )
+)]
+pub async fn update_party(
+    State(state): State<AppState>,
+    Path(id): Path<i32>,
+    Json(payload): Json<UpdatePartyRequest>,
+) -> Result<Json<PartyResponse>, (StatusCode, String)> {
+    let db = &state.conn;
+
+    // Get the party
+    let party = Party::find_by_id(id)
+        .one(db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or((
+            StatusCode::NOT_FOUND,
+            format!("Party with id {} not found", id),
+        ))?;
+
+    // Update party
+    let mut party_model: party::ActiveModel = party.clone().into();
+
+    if let Some(name) = payload.name {
+        party_model.name = Set(name);
+    }
+
+    let updated_party = party_model
+        .update(db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(updated_party.into()))
+}
+
+/// Delete a party
+#[utoipa::path(
+    delete,
+    path = "/api/parties/{id}",
+    tag = "parties",
+    params(
+        ("id" = i32, Path, description = "Party ID")
+    ),
+    responses(
+        (status = 204, description = "Party deleted successfully"),
+        (status = 404, description = "Party not found", body = String),
+        (status = 500, description = "Internal server error", body = String)
+    )
+)]
+pub async fn delete_party(
+    State(state): State<AppState>,
+    Path(id): Path<i32>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let db = &state.conn;
+
+    // Verify the party exists
+    let _ = Party::find_by_id(id)
+        .one(db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or((
+            StatusCode::NOT_FOUND,
+            format!("Party with id {} not found", id),
+        ))?;
+
+    // Start a transaction
+    let txn = db
+        .begin()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Delete all user-party relationships first
+    UserParty::delete_many()
+        .filter(user_party::Column::PartyId.eq(id))
+        .exec(&txn)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Delete the party
+    Party::delete_by_id(id)
+        .exec(&txn)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Commit transaction
+    txn.commit()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Leave a party
+#[utoipa::path(
+    post,
+    path = "/api/parties/{party_id}/leave",
+    tag = "parties",
+    params(
+        ("party_id" = i32, Path, description = "Party ID")
+    ),
+    request_body = i32,
+    responses(
+        (status = 204, description = "Successfully left party"),
+        (status = 404, description = "Party or membership not found", body = String),
+        (status = 500, description = "Internal server error", body = String)
+    )
+)]
+pub async fn leave_party(
+    State(state): State<AppState>,
+    Path(party_id): Path<i32>,
+    Json(user_id): Json<i32>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let db = &state.conn;
+
+    // Verify the party exists
+    let party = Party::find_by_id(party_id)
+        .one(db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or((
+            StatusCode::NOT_FOUND,
+            format!("Party with id {} not found", party_id),
+        ))?;
+
+    // Check if user is the owner
+    if party.owner_id == user_id {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Party owner cannot leave the party. Delete the party instead."
+                .to_string(),
+        ));
+    }
+
+    // Find and delete the user-party relationship
+    let result = UserParty::delete_many()
+        .filter(user_party::Column::UserId.eq(user_id))
+        .filter(user_party::Column::PartyId.eq(party_id))
+        .exec(db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    if result.rows_affected == 0 {
+        return Err((
+            StatusCode::NOT_FOUND,
+            "User is not a member of this party".to_string(),
+        ));
+    }
+
+    Ok(StatusCode::NO_CONTENT)
 }

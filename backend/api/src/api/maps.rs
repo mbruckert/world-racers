@@ -4,24 +4,27 @@ use axum::{
     http::StatusCode,
     routing::{delete, get, post},
 };
+use chrono::DateTime;
 use entity::checkpoint::{self, Entity as Checkpoint};
 use entity::map::{self, Entity as Map};
 use entity::user::Entity as User;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, Set, TransactionTrait, prelude::*,
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, Set,
+    TransactionTrait,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::db::AppState;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct CheckpointData {
     latitude: f32,
     longitude: f32,
     position: i32,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct CreateMapRequest {
     title: String,
     description: String,
@@ -33,12 +36,22 @@ pub struct CreateMapRequest {
     checkpoints: Vec<CheckpointData>,
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, ToSchema)]
+pub struct UpdateMapRequest {
+    title: Option<String>,
+    description: Option<String>,
+    start_latitude: Option<f32>,
+    start_longitude: Option<f32>,
+    end_latitude: Option<f32>,
+    end_longitude: Option<f32>,
+}
+
+#[derive(Serialize, ToSchema)]
 pub struct MapResponse {
     id: i32,
     title: String,
     description: String,
-    created_at: DateTimeWithTimeZone,
+    created_at: DateTime<chrono::FixedOffset>,
     author_id: i32,
     start_latitude: f32,
     start_longitude: f32,
@@ -64,7 +77,7 @@ impl From<map::Model> for MapResponse {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct CheckpointResponse {
     id: i32,
     map_id: i32,
@@ -85,7 +98,7 @@ impl From<checkpoint::Model> for CheckpointResponse {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct MapWithCheckpointsResponse {
     map: MapResponse,
     checkpoints: Vec<CheckpointResponse>,
@@ -101,6 +114,16 @@ pub fn router() -> Router<AppState> {
         .route("/maps/:id/details", get(get_map_with_checkpoints))
 }
 
+/// List all maps
+#[utoipa::path(
+    get,
+    path = "/api/maps",
+    tag = "maps",
+    responses(
+        (status = 200, description = "List of maps retrieved successfully", body = Vec<MapResponse>),
+        (status = 500, description = "Internal server error", body = String)
+    )
+)]
 async fn list_maps(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<MapResponse>>, (StatusCode, String)> {
@@ -115,6 +138,20 @@ async fn list_maps(
     Ok(Json(maps.into_iter().map(MapResponse::from).collect()))
 }
 
+/// Get a map by ID
+#[utoipa::path(
+    get,
+    path = "/api/maps/{id}",
+    tag = "maps",
+    params(
+        ("id" = i32, Path, description = "Map ID")
+    ),
+    responses(
+        (status = 200, description = "Map found", body = MapResponse),
+        (status = 404, description = "Map not found", body = String),
+        (status = 500, description = "Internal server error", body = String)
+    )
+)]
 async fn get_map(
     State(state): State<AppState>,
     Path(id): Path<i32>,
@@ -133,6 +170,20 @@ async fn get_map(
     Ok(Json(map.into()))
 }
 
+/// Get a map with all its checkpoints
+#[utoipa::path(
+    get,
+    path = "/api/maps/{id}/details",
+    tag = "maps",
+    params(
+        ("id" = i32, Path, description = "Map ID")
+    ),
+    responses(
+        (status = 200, description = "Map with checkpoints found", body = MapWithCheckpointsResponse),
+        (status = 404, description = "Map not found", body = String),
+        (status = 500, description = "Internal server error", body = String)
+    )
+)]
 async fn get_map_with_checkpoints(
     State(state): State<AppState>,
     Path(id): Path<i32>,
@@ -166,6 +217,18 @@ async fn get_map_with_checkpoints(
     Ok(Json(response))
 }
 
+/// Create a new map
+#[utoipa::path(
+    post,
+    path = "/api/maps",
+    tag = "maps",
+    request_body = CreateMapRequest,
+    responses(
+        (status = 200, description = "Map created successfully", body = MapWithCheckpointsResponse),
+        (status = 400, description = "Invalid request", body = String),
+        (status = 500, description = "Internal server error", body = String)
+    )
+)]
 async fn create_map(
     State(state): State<AppState>,
     Json(payload): Json<CreateMapRequest>,
@@ -243,6 +306,20 @@ async fn create_map(
     Ok(Json(response))
 }
 
+/// Delete a map and all its checkpoints
+#[utoipa::path(
+    delete,
+    path = "/api/maps/{id}",
+    tag = "maps",
+    params(
+        ("id" = i32, Path, description = "Map ID")
+    ),
+    responses(
+        (status = 204, description = "Map deleted successfully"),
+        (status = 404, description = "Map not found", body = String),
+        (status = 500, description = "Internal server error", body = String)
+    )
+)]
 async fn delete_map(
     State(state): State<AppState>,
     Path(id): Path<i32>,
@@ -286,6 +363,20 @@ async fn delete_map(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Get all checkpoints for a map
+#[utoipa::path(
+    get,
+    path = "/api/maps/{map_id}/checkpoints",
+    tag = "maps",
+    params(
+        ("map_id" = i32, Path, description = "Map ID")
+    ),
+    responses(
+        (status = 200, description = "Checkpoints retrieved successfully", body = Vec<CheckpointResponse>),
+        (status = 404, description = "Map not found", body = String),
+        (status = 500, description = "Internal server error", body = String)
+    )
+)]
 async fn get_checkpoints(
     State(state): State<AppState>,
     Path(map_id): Path<i32>,

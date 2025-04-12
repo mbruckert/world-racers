@@ -7,15 +7,16 @@ use axum::{
 use entity::user::{self, Entity as User};
 use sea_orm::{ActiveModelTrait, EntityTrait, QueryOrder, Set, prelude::DateTime};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::db::AppState;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct CreateUserRequest {
     name: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct UserResponse {
     id: i32,
     name: String,
@@ -35,10 +36,20 @@ impl From<user::Model> for UserResponse {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/users", get(list_users))
-        .route("/users", post(create_user))
+        .route("/users", post(register_user))
         .route("/users/:id", get(get_user))
 }
 
+/// List all users
+#[utoipa::path(
+    get,
+    path = "/api/users",
+    tag = "users",
+    responses(
+        (status = 200, description = "List of users retrieved successfully", body = Vec<UserResponse>),
+        (status = 500, description = "Internal server error", body = String)
+    )
+)]
 async fn list_users(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<UserResponse>>, (StatusCode, String)> {
@@ -53,6 +64,20 @@ async fn list_users(
     Ok(Json(users.into_iter().map(UserResponse::from).collect()))
 }
 
+/// Get a user by id
+#[utoipa::path(
+    get,
+    path = "/api/users/{id}",
+    tag = "users",
+    params(
+        ("id" = i32, Path, description = "User id")
+    ),
+    responses(
+        (status = 200, description = "User found", body = UserResponse),
+        (status = 404, description = "User not found", body = String),
+        (status = 500, description = "Internal server error", body = String)
+    )
+)]
 async fn get_user(
     State(state): State<AppState>,
     Path(id): Path<i32>,
@@ -71,7 +96,18 @@ async fn get_user(
     Ok(Json(user.into()))
 }
 
-async fn create_user(
+/// Create a new user
+#[utoipa::path(
+    post,
+    path = "/api/users",
+    tag = "users",
+    request_body = CreateUserRequest,
+    responses(
+        (status = 200, description = "User created successfully", body = UserResponse),
+        (status = 500, description = "Internal server error", body = String)
+    )
+)]
+async fn register_user(
     State(state): State<AppState>,
     Json(payload): Json<CreateUserRequest>,
 ) -> Result<Json<UserResponse>, (StatusCode, String)> {
