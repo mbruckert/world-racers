@@ -4,7 +4,6 @@ services:
       - "--api.insecure=false"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
       - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
       - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
       - "--entrypoints.websecure.address=:443"
@@ -19,26 +18,26 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - letsencrypt:/letsencrypt
     ports:
-      - "80:80"
       - "443:443"
     restart: always
-
   backend:
     restart: always
     labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.backend.rule=PathPrefix(`/api`) || PathPrefix(`/swagger-ui/`) || PathPrefix(`/api-docs/`)"
+      - "traefik.http.services.backend.loadbalancer.server.port=${SERVER_PORT}"
       - "traefik.http.routers.backend.tls=true"
       - "traefik.http.routers.backend.tls.certresolver=cloudflare"
       - "traefik.http.routers.backend.entrypoints=websecure"
-
   frontend:
     restart: always
     labels:
       - "traefik.http.routers.frontend.tls=true"
       - "traefik.http.routers.frontend.tls.certresolver=cloudflare"
       - "traefik.http.routers.frontend.entrypoints=websecure"
-
+      - "traefik.http.routers.frontend.rule=Host(`${DOMAIN}`)"
   postgres:
     restart: always
-
 volumes:
   letsencrypt: 
