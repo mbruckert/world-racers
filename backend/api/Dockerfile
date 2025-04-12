@@ -5,6 +5,7 @@ FROM chef AS planner
 COPY api/Cargo.toml /app/api/Cargo.toml
 COPY entity/Cargo.toml /app/entity/Cargo.toml
 COPY migration/Cargo.toml /app/migration/Cargo.toml
+COPY auth/Cargo.toml /app/auth/Cargo.toml
 
 # Create fake lib.rs file
 RUN mkdir -p /app/api/src/
@@ -19,6 +20,7 @@ COPY --from=planner /app/api/recipe.json /app/api/recipe.json
 COPY api /app/api
 COPY entity /app/entity
 COPY migration /app/migration
+COPY auth /app/auth
 WORKDIR /app/api
 
 # Build dependencies - this is the caching Docker layer!
