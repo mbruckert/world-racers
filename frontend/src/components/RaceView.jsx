@@ -405,43 +405,7 @@ export default function RaceView({ startPosition }) {
     };
   }, [raceStarted]);
 
-  // A simple collision check (unchanged)
-  const checkCollision = (position) => {
-    if (!mapRef.current) return false;
-    const map = mapRef.current;
-    const [lng, lat] = position;
-    const delta = 0.00001;
-    const features = map.queryRenderedFeatures(
-      [
-        map.project([lng - delta, lat - delta]),
-        map.project([lng + delta, lat + delta]),
-      ],
-      { layers: ["3d-buildings"] }
-    );
-
-    for (const feature of features) {
-      if (feature.geometry.type === "Polygon") {
-        const coords = feature.geometry.coordinates[0];
-        let minLng = 180,
-          maxLng = -180,
-          minLat = 90,
-          maxLat = -90;
-
-        for (const [ptLng, ptLat] of coords) {
-          minLng = Math.min(minLng, ptLng);
-          maxLng = Math.max(maxLng, ptLng);
-          minLat = Math.min(minLat, ptLat);
-          maxLat = Math.max(maxLat, ptLat);
-        }
-        if (lng >= minLng && lng <= maxLng && lat >= minLat && lat <= maxLat) {
-          return true;
-        }
-      }
-    }
-    return false;
-  };
-
-  // Game loop (movement, collisions, etc.)
+  // Game loop (movement, etc.)
   useEffect(() => {
     if (!isMapLoaded || !raceStarted) return;
 
@@ -579,7 +543,6 @@ export default function RaceView({ startPosition }) {
       }
 
       // Update position
-      const oldPos = [...state.carPosition];
       if (Math.abs(state.carSpeed) > 1e-9) {
         const vx = state.carSpeed * Math.sin(state.carHeading);
         const vy = state.carSpeed * Math.cos(state.carHeading);
@@ -599,14 +562,7 @@ export default function RaceView({ startPosition }) {
           state.carPosition[1] + state.carVelocity[1],
         ];
 
-        if (checkCollision(newPos)) {
-          state.carPosition = oldPos;
-          state.carVelocity[0] = -state.carVelocity[0] * 0.3;
-          state.carVelocity[1] = -state.carVelocity[1] * 0.3;
-          state.carSpeed *= 0.3;
-        } else {
-          state.carPosition = newPos;
-        }
+        state.carPosition = newPos;
       }
 
       // Move camera with the car
