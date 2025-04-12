@@ -16,6 +16,9 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            # Exit immediately if a command exits with a non-zero status
+            set -e
+            
             # Navigate to project directory
             cd /opt/world-racers
             
@@ -28,10 +31,10 @@ jobs:
             export VERSION=$(date +'%Y%m%d%H%M%S')
             echo "Deploying version: $VERSION"
             
-            # Build and restart with docker-compose
-            docker-compose down
-            docker-compose build --no-cache
-            docker-compose up -d
+            # Build and restart with docker compose
+            docker compose down
+            docker compose build --no-cache
+            docker compose up -d
             
             # Optional: Clean up old images to save space
             docker image prune -f 
