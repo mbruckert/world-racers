@@ -1,5 +1,16 @@
 # Running Migrator CLI
 
+## Setup
+
+```bash
+source ../.env
+```
+
+Prefix all commands with `DATABASE_URL=$LOCAL_DATABASE_URL`
+
+## Usage
+
+
 - Generate a new migration file
     ```sh
     cargo run -- generate MIGRATION_NAME
