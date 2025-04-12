@@ -2,6 +2,7 @@
     "conventionalCommits.scopes": [
         "orm",
         "backend",
-        "devcontainer"
+        "devcontainer",
+        "frontend"
     ]
 }
