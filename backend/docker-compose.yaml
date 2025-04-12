@@ -17,7 +17,7 @@ services:
   redis:
     image: redis:latest
     ports:
-      - "${REDIS_PORT}:6379"
+      - "${LOCAL_REDIS_PORT}:${LOCAL_REDIS_PORT}"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -38,6 +38,11 @@ services:
       - redis
     ports:
       - "${SERVER_PORT}:${SERVER_PORT}"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${SERVER_PORT}/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:
