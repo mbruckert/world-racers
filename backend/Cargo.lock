@@ -131,6 +131,7 @@ dependencies = [
  "dotenv",
  "entity",
  "futures",
+ "migration",
  "rand 0.9.0",
  "rand-distributions",
  "rand_core 0.9.3",

@@ -10,7 +10,7 @@ pub struct Model {
     pub id: i32,
     pub user_id: i32,
     pub party_id: i32,
-    pub joined_at: DateTime,
+    pub joined_at: DateTimeWithTimeZone,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

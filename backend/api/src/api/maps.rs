@@ -108,10 +108,10 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/maps", get(list_maps))
         .route("/maps", post(create_map))
-        .route("/maps/:id", get(get_map))
-        .route("/maps/:id", delete(delete_map))
-        .route("/maps/:id/checkpoints", get(get_checkpoints))
-        .route("/maps/:id/details", get(get_map_with_checkpoints))
+        .route("/maps/{id}", get(get_map))
+        .route("/maps/{id}", delete(delete_map))
+        .route("/maps/{id}/checkpoints", get(get_checkpoints))
+        .route("/maps/{id}/details", get(get_map_with_checkpoints))
 }
 
 /// List all maps

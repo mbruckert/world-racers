@@ -9,7 +9,6 @@ use entity::user::{self, Entity as User};
 use entity::user_party::{self, Entity as UserParty};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, Set, TransactionTrait,
-    prelude::DateTime,
 };
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -29,7 +28,7 @@ pub struct PartyResponse {
     name: String,
     code: String,
     owner_id: i32,
-    created_at: DateTime,
+    created_at: chrono::DateTime<chrono::FixedOffset>,
 }
 
 impl From<party::Model> for PartyResponse {
@@ -55,15 +54,21 @@ pub struct UpdatePartyRequest {
     name: Option<String>,
 }
 
+#[derive(Deserialize, ToSchema)]
+pub struct LeavePartyRequest {
+    user_id: i32,
+}
+
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/parties", get(list_parties))
         .route("/parties", post(create_party))
-        .route("/parties/:id", get(get_party))
-        .route("/parties/:id", post(update_party))
-        .route("/parties/:id", delete(delete_party))
-        .route("/parties/:id/members", get(get_party_members))
-        .route("/parties/:id/leave", post(leave_party))
+        .route("/parties/{id}", get(get_party))
+        .route("/parties/{id}", post(update_party))
+        .route("/parties/{id}", delete(delete_party))
+        .route("/parties/{id}/members", get(get_party_members))
+        .route("/parties/{id}/leave", post(leave_party))
         .route("/parties/join", post(join_party))
 }
 
@@ -419,6 +424,8 @@ pub async fn delete_party(
     Ok(StatusCode::NO_CONTENT)
 }
 
+
+
 /// Leave a party
 #[utoipa::path(
     post,
@@ -427,7 +434,7 @@ pub async fn delete_party(
     params(
         ("party_id" = i32, Path, description = "Party ID")
     ),
-    request_body = i32,
+    request_body = LeavePartyRequest,
     responses(
         (status = 204, description = "Successfully left party"),
         (status = 404, description = "Party or membership not found", body = String),
@@ -437,15 +444,16 @@ pub async fn delete_party(
 pub async fn leave_party(
     State(state): State<AppState>,
     Path(party_id): Path<i32>,
-    Json(user_id): Json<i32>,
+    Json(payload): Json<LeavePartyRequest>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     let db = &state.conn;
+    let user_id = payload.user_id;
 
     // Verify the party exists
     let party = Party::find_by_id(party_id)
         .one(db)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .ok_or((
             StatusCode::NOT_FOUND,
             format!("Party with id {} not found", party_id),
@@ -455,8 +463,7 @@ pub async fn leave_party(
     if party.owner_id == user_id {
         return Err((
             StatusCode::BAD_REQUEST,
-            "Party owner cannot leave the party. Delete the party instead."
-                .to_string(),
+            "Party owner cannot leave the party. Delete the party instead.".to_string(),
         ));
     }
 

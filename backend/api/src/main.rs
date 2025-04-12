@@ -3,6 +3,7 @@ mod config;
 mod db;
 
 use anyhow::Result;
+use migration::MigratorTrait;
 use std::net::SocketAddr;
 use std::sync::{
     Arc,
@@ -26,6 +27,9 @@ async fn main() -> Result<()> {
 
     // Initialize database connections
     let state = db::init_state(&config).await?;
+
+    // Run migrations
+    migration::Migrator::up(&state.conn, None).await?;
 
     // Build application router
     let app = api::create_router(state);

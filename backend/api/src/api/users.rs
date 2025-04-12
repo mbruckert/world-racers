@@ -5,7 +5,7 @@ use axum::{
     routing::{get, post},
 };
 use entity::user::{self, Entity as User};
-use sea_orm::{ActiveModelTrait, EntityTrait, QueryOrder, Set, prelude::DateTime};
+use sea_orm::{ActiveModelTrait, EntityTrait, QueryOrder, Set};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -20,7 +20,7 @@ pub struct CreateUserRequest {
 pub struct UserResponse {
     id: i32,
     name: String,
-    created_at: DateTime,
+    created_at: chrono::DateTime<chrono::FixedOffset>,
 }
 
 impl From<user::Model> for UserResponse {
@@ -37,7 +37,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/users", get(list_users))
         .route("/users", post(register_user))
-        .route("/users/:id", get(get_user))
+        .route("/users/{id}", get(get_user))
 }
 
 /// List all users

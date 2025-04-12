@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+migration = { path = "../migration" }
 axum = { version = "0.8", features = ["ws", "macros"] }
 tokio = { version = "1", features = ["full"] }
 sea-orm = { version = "1.1.8", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros"] }
