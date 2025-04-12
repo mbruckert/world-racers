@@ -11,7 +11,14 @@
 	},
 
 	"postCreateCommand": "sudo chmod +x scripts/*.sh && scripts/setup.sh",
-	"postStartCommand": "scripts/start.sh"
+	"postStartCommand": "scripts/start.sh",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"fill-labs.dependi"
+			]
+		}
+	}
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	// "features": {},
