@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import * as THREE from "three";
@@ -7,15 +7,23 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 // Access token
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_API_KEY;
 
-export default function RaceView() {
+export default function RaceView({ startPosition }) {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
+  const [modelLoaded, setModelLoaded] = useState(false);
+  const [countdown, setCountdown] = useState(3);
+  const [raceStarted, setRaceStarted] = useState(false);
+
+  // Initialize carPosition from props or default
+  const initialPosition = useMemo(() => {
+    return startPosition || [-81.1989, 28.6024];
+  }, [startPosition]);
 
   // Game state
   const gameState = useRef({
     // Position & motion
-    carPosition: [-81.1989, 28.6024], // [lng, lat]
+    carPosition: initialPosition, // Use memoized initial position
     carHeading: 0, // radians, 0 is north
     carSpeed: 0,
     carVelocity: [0, 0],
@@ -66,11 +74,29 @@ export default function RaceView() {
 
   // Debug UI state
   const [debugInfo, setDebugInfo] = useState({
-    position: [-74.012, 32],
+    position: initialPosition,
     heading: 0,
     speed: 0,
     activeKeys: [],
   });
+
+  // Start the countdown when model is loaded
+  useEffect(() => {
+    if (isMapLoaded && modelLoaded) {
+      const timer = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            setRaceStarted(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => clearInterval(timer);
+    }
+  }, [isMapLoaded, modelLoaded]);
 
   useEffect(() => {
     // Initialize map
@@ -173,6 +199,7 @@ export default function RaceView() {
 
               this.scene.add(this.carModel);
               gameState.current.modelLoaded = true;
+              setModelLoaded(true);
               console.log("Model loaded successfully");
             },
             undefined,
@@ -323,10 +350,12 @@ export default function RaceView() {
     });
 
     return () => map.remove();
-  }, []);
+  }, [initialPosition]);
 
   // Keyboard input
   useEffect(() => {
+    if (!raceStarted) return;
+
     const keyMap = {
       ArrowUp: "forward",
       ArrowDown: "backward",
@@ -374,7 +403,7 @@ export default function RaceView() {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, []);
+  }, [raceStarted]);
 
   // A simple collision check (unchanged)
   const checkCollision = (position) => {
@@ -414,7 +443,7 @@ export default function RaceView() {
 
   // Game loop (movement, collisions, etc.)
   useEffect(() => {
-    if (!isMapLoaded) return;
+    if (!isMapLoaded || !raceStarted) return;
 
     let animationId;
 
@@ -606,11 +635,43 @@ export default function RaceView() {
 
     animationId = requestAnimationFrame(gameLoop);
     return () => cancelAnimationFrame(animationId);
-  }, [isMapLoaded]);
+  }, [isMapLoaded, raceStarted]);
 
   return (
     <div className="w-full h-full relative">
       <div ref={mapContainerRef} className="w-full h-full" />
+
+      {/* Loading overlay */}
+      {isMapLoaded && !modelLoaded && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-70">
+          <div className="w-16 h-16 border-t-4 border-blue-500 rounded-full animate-spin mb-4"></div>
+          <div className="text-white text-xl">Loading race car...</div>
+        </div>
+      )}
+
+      {/* Countdown overlay */}
+      {modelLoaded && countdown > 0 && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-60">
+          <div className="text-white text-2xl mb-4">Race starting in</div>
+          <div className="text-white text-8xl font-bold animate-bounce">
+            {countdown}
+          </div>
+          <div className="mt-8 text-gray-300 text-lg">Get ready!</div>
+        </div>
+      )}
+
+      {/* Controls help overlay */}
+      {raceStarted && (
+        <div className="absolute bottom-4 left-4 bg-black bg-opacity-60 text-white p-3 rounded-lg">
+          <div className="text-sm mb-1 font-medium">Controls:</div>
+          <div className="grid grid-cols-2 gap-x-4 text-xs">
+            <div>W / ↑: Accelerate</div>
+            <div>S / ↓: Brake/Reverse</div>
+            <div>A / ←: Turn Left</div>
+            <div>D / →: Turn Right</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
