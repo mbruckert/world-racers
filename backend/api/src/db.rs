@@ -7,6 +7,7 @@ use crate::config::Config;
 pub struct AppState {
     pub conn: DatabaseConnection,
     pub redis: RedisClient,
+    pub config: Config,
 }
 
 pub async fn init_database(config: &Config) -> Result<DatabaseConnection, DbErr> {
@@ -24,5 +25,9 @@ pub async fn init_state(config: &Config) -> anyhow::Result<AppState> {
     let conn = init_database(config).await?;
     let redis = init_redis(config)?;
 
-    Ok(AppState { conn, redis })
+    Ok(AppState {
+        conn,
+        redis,
+        config: config.clone(),
+    })
 }

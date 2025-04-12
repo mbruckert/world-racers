@@ -36,16 +36,6 @@ pub struct CreateMapRequest {
     checkpoints: Vec<CheckpointData>,
 }
 
-#[derive(Deserialize, ToSchema)]
-pub struct UpdateMapRequest {
-    title: Option<String>,
-    description: Option<String>,
-    start_latitude: Option<f32>,
-    start_longitude: Option<f32>,
-    end_latitude: Option<f32>,
-    end_longitude: Option<f32>,
-}
-
 #[derive(Serialize, ToSchema)]
 pub struct MapResponse {
     id: i32,

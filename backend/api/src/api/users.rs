@@ -1,20 +1,16 @@
+use auth::Auth;
 use axum::{
     Router,
-    extract::{Json, Path, State},
-    http::StatusCode,
-    routing::{get, post},
+    extract::{Json, State},
+    http::{Request, StatusCode, header},
+    routing::get,
 };
 use entity::user::{self, Entity as User};
-use sea_orm::{ActiveModelTrait, EntityTrait, QueryOrder, Set};
-use serde::{Deserialize, Serialize};
+use sea_orm::EntityTrait;
+use serde::Serialize;
 use utoipa::ToSchema;
 
 use crate::db::AppState;
-
-#[derive(Deserialize, ToSchema)]
-pub struct CreateUserRequest {
-    name: String,
-}
 
 #[derive(Serialize, ToSchema)]
 pub struct UserResponse {
@@ -34,95 +30,69 @@ impl From<user::Model> for UserResponse {
 }
 
 pub fn router() -> Router<AppState> {
-    Router::new()
-        .route("/users", get(list_users))
-        .route("/users", post(register_user))
-        .route("/users/{id}", get(get_user))
+    Router::new().route("/users/me", get(me))
 }
 
-/// List all users
+/// Get current authenticated user info
 #[utoipa::path(
     get,
-    path = "/api/users",
+    path = "/api/users/me",
     tag = "users",
     responses(
-        (status = 200, description = "List of users retrieved successfully", body = Vec<UserResponse>),
-        (status = 500, description = "Internal server error", body = String)
-    )
-)]
-async fn list_users(
-    State(state): State<AppState>,
-) -> Result<Json<Vec<UserResponse>>, (StatusCode, String)> {
-    let db = &state.conn;
-
-    let users = User::find()
-        .order_by_asc(user::Column::Id)
-        .all(db)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    Ok(Json(users.into_iter().map(UserResponse::from).collect()))
-}
-
-/// Get a user by id
-#[utoipa::path(
-    get,
-    path = "/api/users/{id}",
-    tag = "users",
-    params(
-        ("id" = i32, Path, description = "User id")
-    ),
-    responses(
-        (status = 200, description = "User found", body = UserResponse),
+        (status = 200, description = "Current user info retrieved successfully", body = UserResponse),
+        (status = 401, description = "Unauthorized", body = String),
         (status = 404, description = "User not found", body = String),
         (status = 500, description = "Internal server error", body = String)
     )
 )]
-async fn get_user(
+async fn me(
     State(state): State<AppState>,
-    Path(id): Path<i32>,
+    req: Request<axum::body::Body>,
 ) -> Result<Json<UserResponse>, (StatusCode, String)> {
-    let db = &state.conn;
+    // Extract and validate the JWT token
+    let auth_header = req
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|header| header.to_str().ok())
+        .and_then(|value| {
+            if value.starts_with("Bearer ") {
+                Some(value[7..].to_owned())
+            } else {
+                None
+            }
+        })
+        .ok_or((
+            StatusCode::UNAUTHORIZED,
+            "No authorization token provided".to_string(),
+        ))?;
 
-    let user = User::find_by_id(id)
+    // Create auth instance
+    let auth = Auth::new(
+        state.config.jwt_secret.clone(),
+        state.config.jwt_expiry,
+        state.config.refresh_expiry,
+    );
+
+    // Validate the token
+    let claims = auth.verify_token(&auth_header).map_err(|_| {
+        (
+            StatusCode::UNAUTHORIZED,
+            "Invalid authorization token".to_string(),
+        )
+    })?;
+
+    // Get user from database
+    let db = &state.conn;
+    let user_id = claims.sub;
+
+    let user = User::find_by_id(user_id)
         .one(db)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .ok_or((
             StatusCode::NOT_FOUND,
-            format!("User with id {} not found", id),
+            format!("User with id {} not found", user_id),
         ))?;
-
-    Ok(Json(user.into()))
-}
-
-/// Create a new user
-#[utoipa::path(
-    post,
-    path = "/api/users",
-    tag = "users",
-    request_body = CreateUserRequest,
-    responses(
-        (status = 200, description = "User created successfully", body = UserResponse),
-        (status = 500, description = "Internal server error", body = String)
-    )
-)]
-async fn register_user(
-    State(state): State<AppState>,
-    Json(payload): Json<CreateUserRequest>,
-) -> Result<Json<UserResponse>, (StatusCode, String)> {
-    let db = &state.conn;
-
-    // Using current_timestamp database function
-    let new_user = user::ActiveModel {
-        name: Set(payload.name),
-        ..Default::default()
-    };
-
-    let user = new_user
-        .insert(db)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     Ok(Json(user.into()))
 }

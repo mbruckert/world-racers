@@ -8,6 +8,9 @@ pub struct Config {
     pub redis_port: u16,
     pub server_host: String,
     pub server_port: u16,
+    pub jwt_secret: String,
+    pub jwt_expiry: i64,     // in seconds
+    pub refresh_expiry: i64, // in seconds
 }
 
 #[derive(Error, Debug)]
@@ -32,6 +35,18 @@ impl Config {
                 .unwrap_or_else(|_| "8080".to_string())
                 .parse::<u16>()
                 .map_err(|e| ConfigError::ParseError("SERVER_PORT".to_string(), e.to_string()))?,
+            jwt_secret: env::var("JWT_SECRET")
+                .unwrap_or_else(|_| "your_jwt_secret_key_replace_in_production".to_string()),
+            jwt_expiry: env::var("JWT_EXPIRY")
+                .unwrap_or_else(|_| "3600".to_string()) // 1 hour default
+                .parse::<i64>()
+                .map_err(|e| ConfigError::ParseError("JWT_EXPIRY".to_string(), e.to_string()))?,
+            refresh_expiry: env::var("REFRESH_EXPIRY")
+                .unwrap_or_else(|_| "604800".to_string()) // 7 days default
+                .parse::<i64>()
+                .map_err(|e| {
+                    ConfigError::ParseError("REFRESH_EXPIRY".to_string(), e.to_string())
+                })?,
         })
     }
 }

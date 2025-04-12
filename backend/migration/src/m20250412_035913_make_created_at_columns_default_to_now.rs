@@ -36,7 +36,6 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-
         Ok(())
     }
 
@@ -73,7 +72,6 @@ impl MigrationTrait for Migration {
     }
 }
 
-
 #[derive(DeriveIden)]
 enum User {
     Table,
@@ -85,4 +83,3 @@ enum Party {
     Table,
     CreatedAt,
 }
-

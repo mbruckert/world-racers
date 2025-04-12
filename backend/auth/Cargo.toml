@@ -1,0 +1,19 @@
+[package]
+name = "auth"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+jsonwebtoken = "9.3.0"
+serde = { version = "1.0", features = ["derive"] }
+chrono = { version = "0.4.40", features = ["serde"] }
+uuid = { version = "1.8.0", features = ["v4", "serde"] }
+bcrypt = "0.17"
+entity = { path = "../entity" }
+thiserror = "2.0"
+anyhow = "1.0"
+sea-orm = { version = "1.1.8", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros"] }
+utoipa = { version = "5.3.1", features = ["axum_extras", "chrono", "decimal_float"] }
+axum = "0.8.3"
+async-trait = "0.1.88"
+http = "1.3.1"

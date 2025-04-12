@@ -2,7 +2,7 @@ use axum::{
     Router,
     extract::{Json, Path, State},
     http::StatusCode,
-    routing::{delete, get, post},
+    routing::{get, post},
 };
 use entity::party::{self, Entity as Party};
 use entity::user::{self, Entity as User};
@@ -59,6 +59,10 @@ pub struct LeavePartyRequest {
     user_id: i32,
 }
 
+#[derive(Deserialize, ToSchema)]
+pub struct DisbandPartyRequest {
+    owner_id: i32,
+}
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -66,9 +70,9 @@ pub fn router() -> Router<AppState> {
         .route("/parties", post(create_party))
         .route("/parties/{id}", get(get_party))
         .route("/parties/{id}", post(update_party))
-        .route("/parties/{id}", delete(delete_party))
         .route("/parties/{id}/members", get(get_party_members))
         .route("/parties/{id}/leave", post(leave_party))
+        .route("/parties/{id}/disband", post(disband_party))
         .route("/parties/join", post(join_party))
 }
 
@@ -367,65 +371,6 @@ pub async fn update_party(
     Ok(Json(updated_party.into()))
 }
 
-/// Delete a party
-#[utoipa::path(
-    delete,
-    path = "/api/parties/{id}",
-    tag = "parties",
-    params(
-        ("id" = i32, Path, description = "Party ID")
-    ),
-    responses(
-        (status = 204, description = "Party deleted successfully"),
-        (status = 404, description = "Party not found", body = String),
-        (status = 500, description = "Internal server error", body = String)
-    )
-)]
-pub async fn delete_party(
-    State(state): State<AppState>,
-    Path(id): Path<i32>,
-) -> Result<StatusCode, (StatusCode, String)> {
-    let db = &state.conn;
-
-    // Verify the party exists
-    let _ = Party::find_by_id(id)
-        .one(db)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or((
-            StatusCode::NOT_FOUND,
-            format!("Party with id {} not found", id),
-        ))?;
-
-    // Start a transaction
-    let txn = db
-        .begin()
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    // Delete all user-party relationships first
-    UserParty::delete_many()
-        .filter(user_party::Column::PartyId.eq(id))
-        .exec(&txn)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    // Delete the party
-    Party::delete_by_id(id)
-        .exec(&txn)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    // Commit transaction
-    txn.commit()
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    Ok(StatusCode::NO_CONTENT)
-}
-
-
-
 /// Leave a party
 #[utoipa::path(
     post,
@@ -453,7 +398,7 @@ pub async fn leave_party(
     let party = Party::find_by_id(party_id)
         .one(db)
         .await
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .ok_or((
             StatusCode::NOT_FOUND,
             format!("Party with id {} not found", party_id),
@@ -481,6 +426,74 @@ pub async fn leave_party(
             "User is not a member of this party".to_string(),
         ));
     }
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Disband a party (only by owner)
+#[utoipa::path(
+    post,
+    path = "/api/parties/{id}/disband",
+    tag = "parties",
+    params(
+        ("id" = i32, Path, description = "Party ID")
+    ),
+    request_body = DisbandPartyRequest,
+    responses(
+        (status = 204, description = "Party disbanded successfully"),
+        (status = 403, description = "Only the party owner can disband it", body = String),
+        (status = 404, description = "Party not found", body = String),
+        (status = 500, description = "Internal server error", body = String)
+    )
+)]
+pub async fn disband_party(
+    State(state): State<AppState>,
+    Path(id): Path<i32>,
+    Json(payload): Json<DisbandPartyRequest>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let db = &state.conn;
+
+    // Verify the party exists
+    let party = Party::find_by_id(id)
+        .one(db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or((
+            StatusCode::NOT_FOUND,
+            format!("Party with id {} not found", id),
+        ))?;
+
+    // Verify the user is the owner
+    if party.owner_id != payload.owner_id {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Only the party owner can disband the party".to_string(),
+        ));
+    }
+
+    // Start a transaction
+    let txn = db
+        .begin()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Delete all user-party relationships
+    UserParty::delete_many()
+        .filter(user_party::Column::PartyId.eq(id))
+        .exec(&txn)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Delete the party
+    Party::delete_by_id(id)
+        .exec(&txn)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Commit transaction
+    txn.commit()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     Ok(StatusCode::NO_CONTENT)
 }

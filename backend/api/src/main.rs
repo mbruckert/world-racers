@@ -3,6 +3,7 @@ mod config;
 mod db;
 
 use anyhow::Result;
+use auth::impl_auth_from_ref;
 use migration::MigratorTrait;
 use std::net::SocketAddr;
 use std::sync::{
@@ -10,6 +11,9 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+// Implement FromRef for Auth with AppState
+impl_auth_from_ref!(crate::db::AppState);
 
 #[tokio::main]
 async fn main() -> Result<()> {

@@ -1,3 +1,4 @@
+mod auth;
 mod health;
 mod maps;
 mod openapi;
@@ -23,6 +24,7 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/api", parties::router())
         .nest("/api", users::router())
         .nest("/api", ws::router())
+        .nest("/api", auth::router())
         .merge(openapi::swagger_ui())
         .layer(cors)
         .with_state(state)

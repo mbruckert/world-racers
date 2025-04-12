@@ -2,7 +2,7 @@ use axum::Router;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-use super::{health, maps, parties, users};
+use super::{auth, health, maps, parties, users};
 use crate::db::AppState;
 
 #[derive(OpenApi)]
@@ -11,9 +11,7 @@ use crate::db::AppState;
         // Health endpoints
         health::check_health,
         // User endpoints
-        users::list_users,
-        users::get_user,
-        users::register_user,
+        users::me,
         // Maps endpoints
         maps::list_maps,
         maps::get_map,
@@ -28,19 +26,20 @@ use crate::db::AppState;
         parties::join_party,
         parties::get_party_members,
         parties::update_party,
-        parties::delete_party,
-        parties::leave_party
+        parties::leave_party,
+        parties::disband_party,
+        // Auth endpoints
+        auth::register,
+        auth::refresh
     ),
     components(
         schemas(
             // Health schemas
             health::HealthResponse,
             // User schemas
-            users::CreateUserRequest,
             users::UserResponse,
             // Map schemas
             maps::CreateMapRequest,
-            maps::UpdateMapRequest,
             maps::MapResponse,
             maps::CheckpointData,
             maps::CheckpointResponse,
@@ -49,14 +48,19 @@ use crate::db::AppState;
             parties::CreatePartyRequest,
             parties::PartyResponse,
             parties::JoinPartyRequest,
-            parties::UpdatePartyRequest
+            parties::UpdatePartyRequest,
+            // Auth schemas
+            auth::AuthResponse,
+            auth::RegisterRequest,
+            auth::RefreshRequest
         )
     ),
     tags(
         (name = "health", description = "Health check endpoints"),
         (name = "users", description = "User management endpoints"),
         (name = "maps", description = "Map management endpoints"),
-        (name = "parties", description = "Party management endpoints")
+        (name = "parties", description = "Party management endpoints"),
+        (name = "auth", description = "Authentication endpoints")
     ),
     info(
         title = "World Racers API",
