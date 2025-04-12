@@ -14,28 +14,16 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-  redis:
-    image: redis:latest
-    ports:
-      - "${LOCAL_REDIS_PORT}:${LOCAL_REDIS_PORT}"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
   backend:
     build:
       context: .
       dockerfile: api/Dockerfile
     environment:
       DATABASE_URL: ${DOCKER_DATABASE_URL}
-      REDIS_HOST: ${DOCKER_REDIS_HOST}
-      REDIS_PORT: ${DOCKER_REDIS_PORT}
       SERVER_HOST: ${SERVER_HOST}
       SERVER_PORT: ${SERVER_PORT}
     depends_on:
       - postgres
-      - redis
     ports:
       - "${SERVER_PORT}:${SERVER_PORT}"
     healthcheck:

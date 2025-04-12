@@ -4,11 +4,6 @@ services:
       file: ./backend/docker-compose.yaml
       service: postgres
   
-  redis:
-    extends:
-      file: ./backend/docker-compose.yaml
-      service: redis
-  
   backend:
     extends:
       file: ./backend/docker-compose.yaml

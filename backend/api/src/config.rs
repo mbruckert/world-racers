@@ -4,8 +4,6 @@ use thiserror::Error;
 #[derive(Debug, Clone)]
 pub struct Config {
     pub database_url: String,
-    pub redis_host: String,
-    pub redis_port: u16,
     pub server_host: String,
     pub server_port: u16,
     pub jwt_secret: String,
@@ -28,8 +26,6 @@ impl Config {
 
         Ok(Self {
             database_url: get_env_var("DATABASE_URL")?,
-            redis_host: get_env_var("REDIS_HOST")?,
-            redis_port: parse_env_var::<u16>("REDIS_PORT")?,
             server_host: env::var("SERVER_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
             server_port: env::var("SERVER_PORT")
                 .unwrap_or_else(|_| "8080".to_string())
