@@ -1,0 +1,31 @@
+services:
+  postgres:
+    extends:
+      file: ./backend/docker-compose.yaml
+      service: postgres
+  
+  redis:
+    extends:
+      file: ./backend/docker-compose.yaml
+      service: redis
+  
+  backend:
+    extends:
+      file: ./backend/docker-compose.yaml
+      service: backend
+  
+  # Add frontend service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    environment:
+      - VITE_MAPBOX_API_KEY=${VITE_MAPBOX_API_KEY}
+      - VITE_API_URL=http://backend:${SERVER_PORT}
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data: 
