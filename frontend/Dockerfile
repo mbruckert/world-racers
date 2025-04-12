@@ -4,6 +4,14 @@ FROM node:20-alpine AS build
 # Set working directory
 WORKDIR /app
 
+# Define build arguments
+ARG VITE_MAPBOX_API_KEY
+ARG VITE_API_URL
+
+# Set environment variables for the build
+ENV VITE_MAPBOX_API_KEY=${VITE_MAPBOX_API_KEY}
+ENV VITE_API_URL=${VITE_API_URL}
+
 # Copy package.json and package-lock.json
 COPY package.json package-lock.json ./
 

@@ -24,13 +24,6 @@ services:
       SERVER_PORT: ${SERVER_PORT}
     depends_on:
       - postgres
-    ports:
-      - "${SERVER_PORT}:${SERVER_PORT}"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${SERVER_PORT}/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
 volumes:
   postgres_data:
