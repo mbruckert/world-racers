@@ -4,6 +4,8 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
+import CarPhysics from "../car/physics";
+
 // Access token
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_API_KEY;
 
@@ -27,13 +29,16 @@ export default function RaceView({
   const mapRef = useRef(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [modelLoaded, setModelLoaded] = useState(false);
-  const [secondCarModelLoaded, setSecondCarModelLoaded] = useState(false);
   const [countdown, setCountdown] = useState(3);
   const [raceStarted, setRaceStarted] = useState(false);
-  const [routeLoaded, setRouteLoaded] = useState(false);
+  const [_routeLoaded, setRouteLoaded] = useState(false);
   const [routeCoordinates, setRouteCoordinates] = useState([]);
   const [offTrackWarning, setOffTrackWarning] = useState(false);
   const [optimizedCheckpoints, setOptimizedCheckpoints] = useState([]);
+  // Add FPS state
+  const [fps, setFps] = useState(0);
+  // Store the frame times for averaging (past 20 frames)
+  const frameTimesRef = useRef([]);
 
   // Initialize carPosition from props or default
   const initialPosition = useMemo(() => {
@@ -71,86 +76,8 @@ export default function RaceView({
     return presets[timeOfDay] || "day";
   }, [timeOfDay]);
 
-  // Second car initial offset - slightly to the right of the primary car
-  const secondCarInitialOffset = useMemo(() => {
-    return [0.00005, 0.00002]; // Offset in [lng, lat]
-  }, []);
-
-  // Game state
-  const gameState = useRef({
-    // Position & motion
-    carPosition: initialPosition, // Use memoized initial position
-    carHeading: 0, // radians, 0 is north
-    carSpeed: 0,
-    carVelocity: [0, 0],
-
-    // Second car
-    secondCarPosition: [
-      initialPosition[0] + secondCarInitialOffset[0],
-      initialPosition[1] + secondCarInitialOffset[1],
-    ],
-    secondCarHeading: 0, // radians, 0 is north
-    secondCarSpeed: 0,
-    secondCarVelocity: [0, 0],
-    secondCarDistance: 0.00008, // Target distance to maintain from primary car
-
-    // Key-based impulses
-    forwardImpulse: 0,
-    backwardImpulse: 0,
-
-    // Car properties
-    mass: 1800,
-    wheelbase: 2.78,
-    enginePower: 100,
-    brakingForce: 6000,
-    dragCoefficient: 0.35,
-    rollingResistance: 8,
-    frictionCoefficient: 20,
-
-    // Movement controls
-    controls: {
-      forward: false,
-      backward: false,
-      left: false,
-      right: false,
-    },
-
-    // Control duration tracking
-    keyHoldDuration: {
-      forward: 0,
-      backward: 0,
-    },
-    prevControls: {
-      forward: false,
-      backward: false,
-      left: false,
-      right: false,
-    },
-
-    // Slower top speed
-    maxSpeed: 0.000024,
-
-    // Steering & timing
-    steeringAngle: 0,
-    lastFrame: 0,
-
-    // Model info
-    modelLoaded: false,
-    secondCarModelLoaded: false,
-
-    // Race progress tracking
-    checkpointsPassed: [],
-    raceComplete: false,
-    raceStartTime: 0,
-    raceFinishTime: 0,
-
-    // Store the finish position to use consistently throughout the app
-    actualFinishPosition: null, // Will be initialized in useEffect
-
-    // Weather and time settings
-    timeOfDay: timeOfDay,
-    weather: weather,
-  });
+  // Create CarPhysics instance
+  const carPhysics = useRef(new CarPhysics(initialPosition));
 
   // Debug UI state
   const [debugInfo, setDebugInfo] = useState({
@@ -171,7 +98,7 @@ export default function RaceView({
   // Initialize checkpoint status and finish position
   useEffect(() => {
     // Ensure we're using consistent finish position
-    gameState.current.actualFinishPosition = actualFinishPosition;
+    carPhysics.current.actualFinishPosition = actualFinishPosition;
 
     // Calculate initial heading toward first checkpoint or finish
     let initialHeading = 0;
@@ -188,7 +115,7 @@ export default function RaceView({
     }
 
     // Set initial car heading
-    gameState.current.carHeading = initialHeading;
+    carPhysics.current.carHeading = initialHeading;
 
     // Apply initial bearing to map if map is ready
     if (mapRef.current) {
@@ -207,7 +134,7 @@ export default function RaceView({
 
       const initialStatus = orderedCheckpoints.map(() => false);
       setCheckpointStatus(initialStatus);
-      gameState.current.checkpointsPassed = initialStatus;
+      carPhysics.current.checkpointsPassed = initialStatus;
     }
   }, [
     checkpoints,
@@ -225,7 +152,6 @@ export default function RaceView({
     setCountdown(3);
     setRaceStarted(false);
     setModelLoaded(false); // Reset model loaded state to trigger countdown
-    setSecondCarModelLoaded(false); // Reset second car model loaded state
 
     // Reset checkpoint status
     const resetStatus = Array(checkpointStatus.length).fill(false);
@@ -245,30 +171,9 @@ export default function RaceView({
       initialHeading = Math.atan2(dx, dy);
     }
 
-    // Reset game state
-    gameState.current.carPosition = initialPosition;
-    gameState.current.carHeading = initialHeading;
-    gameState.current.carSpeed = 0;
-    gameState.current.carVelocity = [0, 0];
-
-    // Reset second car
-    gameState.current.secondCarPosition = [
-      initialPosition[0] + secondCarInitialOffset[0],
-      initialPosition[1] + secondCarInitialOffset[1],
-    ];
-    gameState.current.secondCarHeading = initialHeading;
-    gameState.current.secondCarSpeed = 0;
-    gameState.current.secondCarVelocity = [0, 0];
-
-    gameState.current.forwardImpulse = 0;
-    gameState.current.backwardImpulse = 0;
-    gameState.current.steeringAngle = 0;
-    gameState.current.checkpointsPassed = resetStatus;
-    gameState.current.raceComplete = false;
-    gameState.current.raceStartTime = 0;
-    gameState.current.raceFinishTime = 0;
-    gameState.current.modelLoaded = false; // Reset model loaded state
-    gameState.current.secondCarModelLoaded = false; // Reset second car model loaded state
+    // Reset physics using the CarPhysics class
+    carPhysics.current.reset(initialPosition, initialHeading, resetStatus);
+    carPhysics.current.modelLoaded = false;
 
     // Reset car position on map with calculated heading
     if (mapRef.current) {
@@ -282,15 +187,13 @@ export default function RaceView({
     // Force re-initialization of the 3D models
     setTimeout(() => {
       setModelLoaded(true);
-      gameState.current.modelLoaded = true;
-      setSecondCarModelLoaded(true);
-      gameState.current.secondCarModelLoaded = true;
+      carPhysics.current.modelLoaded = true;
     }, 100);
   };
 
   // Start the countdown when both models are loaded
   useEffect(() => {
-    if (isMapLoaded && modelLoaded && secondCarModelLoaded) {
+    if (isMapLoaded && modelLoaded) {
       const timer = setInterval(() => {
         setCountdown((prev) => {
           if (prev <= 1) {
@@ -304,7 +207,7 @@ export default function RaceView({
 
       return () => clearInterval(timer);
     }
-  }, [isMapLoaded, modelLoaded, secondCarModelLoaded]);
+  }, [isMapLoaded, modelLoaded]);
 
   // Load and display race route
   const fetchAndDisplayRoute = async (map) => {
@@ -323,8 +226,8 @@ export default function RaceView({
       // Add finish position as the last point
       waypoints.push(finishPointToUse);
 
-      // Also update the game state
-      gameState.current.actualFinishPosition = finishPointToUse;
+      // Also update the car physics
+      carPhysics.current.actualFinishPosition = finishPointToUse;
 
       // Create a direct line between waypoints (not following roads)
       const routeGeometry = {
@@ -345,12 +248,6 @@ export default function RaceView({
         totalDistance += segmentDistance;
       }
 
-      // Create ordered checkpoints array with original positions
-      const orderedCheckpoints = checkpoints.map((checkpoint, index) => ({
-        position: checkpoint,
-        originalIndex: index,
-      }));
-
       // Add the route source and layer
       map.addSource("route", {
         type: "geojson",
@@ -358,84 +255,6 @@ export default function RaceView({
           type: "Feature",
           properties: {},
           geometry: routeGeometry,
-        },
-      });
-
-      // Add route layer - a glowing effect with two lines
-      map.addLayer({
-        id: "route-glow",
-        type: "line",
-        source: "route",
-        layout: {
-          "line-join": "round",
-          "line-cap": "round",
-        },
-        paint: {
-          "line-color": "#4882c5",
-          "line-width": 12,
-          "line-opacity": 0.6,
-          "line-blur": 3,
-        },
-      });
-
-      map.addLayer({
-        id: "route-core",
-        type: "line",
-        source: "route",
-        layout: {
-          "line-join": "round",
-          "line-cap": "round",
-        },
-        paint: {
-          "line-color": "#2b98f0",
-          "line-width": 4,
-          "line-dasharray": [0.5, 1.5],
-          "line-opacity": 0.7,
-        },
-      });
-
-      // Debug drawing - add dots at each coordinate to verify the route
-      const debugPoints = {
-        type: "FeatureCollection",
-        features: waypoints.map((wp, index) => ({
-          type: "Feature",
-          properties: {
-            pointType:
-              index === 0
-                ? "start"
-                : index === waypoints.length - 1
-                ? "finish"
-                : "checkpoint",
-          },
-          geometry: {
-            type: "Point",
-            coordinates: wp,
-          },
-        })),
-      };
-
-      map.addSource("debug-points", {
-        type: "geojson",
-        data: debugPoints,
-      });
-
-      map.addLayer({
-        id: "debug-points-layer",
-        type: "circle",
-        source: "debug-points",
-        paint: {
-          "circle-radius": 4,
-          "circle-color": [
-            "match",
-            ["get", "pointType"],
-            "start",
-            "#00ff00",
-            "finish",
-            "#ff0000",
-            "#ffff00",
-          ],
-          "circle-stroke-width": 2,
-          "circle-stroke-color": "#ffffff",
         },
       });
 
@@ -585,32 +404,24 @@ export default function RaceView({
     }
   };
 
-  // Function to calculate distance between two points (in longitude/latitude)
-  const calculateDistance = (point1, point2) => {
-    // Simple Euclidean distance - for more precise calculations we'd use the Haversine formula
-    const dx = point1[0] - point2[0];
-    const dy = point1[1] - point2[1];
-    return Math.sqrt(dx * dx + dy * dy);
-  };
-
   // Check for checkpoint and finish line crossings
   const checkRaceProgress = () => {
-    const carPosition = gameState.current.carPosition;
+    const carPosition = carPhysics.current.carPosition;
     const checkpointRadius = 0.00015; // Detection radius for checkpoints, ~15m
 
-    // Always use the finish position from game state
-    const finishPos = gameState.current.actualFinishPosition;
+    // Always use the finish position from car physics
+    const finishPos = carPhysics.current.actualFinishPosition;
 
     // Check each checkpoint
     if (optimizedCheckpoints && optimizedCheckpoints.length > 0) {
       let allPassed = true;
 
-      const newStatus = [...gameState.current.checkpointsPassed];
+      const newStatus = [...carPhysics.current.checkpointsPassed];
       optimizedCheckpoints.forEach((checkpoint, index) => {
         // Check if car is within range of checkpoint
         // Make sure checkpoint has a position property before using it
         const checkpointPosition = checkpoint.position || checkpoint;
-        const distance = calculateDistance(carPosition, checkpointPosition);
+        const distance = carPhysics.current.calculateDistance(carPosition, checkpointPosition);
 
         if (distance < checkpointRadius && !newStatus[index]) {
           // Checkpoint passed!
@@ -636,21 +447,16 @@ export default function RaceView({
         if (!newStatus[index]) allPassed = false;
       });
 
-      gameState.current.checkpointsPassed = newStatus;
+      carPhysics.current.checkpointsPassed = newStatus;
       setCheckpointStatus(newStatus);
 
       // Only check finish line if all checkpoints have been passed
-      if (allPassed && !gameState.current.raceComplete) {
-        const finishDistance = calculateDistance(carPosition, finishPos);
+      if (allPassed && !carPhysics.current.raceComplete) {
+        const finishDistance = carPhysics.current.calculateDistance(carPosition, finishPos);
 
         if (finishDistance < checkpointRadius) {
           // Race complete!
-          gameState.current.raceComplete = true;
-          gameState.current.raceFinishTime = performance.now();
-          const totalTime =
-            (gameState.current.raceFinishTime -
-              gameState.current.raceStartTime) /
-            1000;
+          const totalTime = carPhysics.current.completeRace();
           setRaceTime(totalTime);
           setRaceComplete(true);
 
@@ -676,12 +482,12 @@ export default function RaceView({
       let allPassed = true;
 
       const newStatus = [
-        ...(gameState.current.checkpointsPassed ||
+        ...(carPhysics.current.checkpointsPassed ||
           Array(checkpoints.length).fill(false)),
       ];
       checkpoints.forEach((checkpoint, index) => {
         // Check if car is within range of checkpoint
-        const distance = calculateDistance(carPosition, checkpoint);
+        const distance = carPhysics.current.calculateDistance(carPosition, checkpoint);
 
         if (distance < checkpointRadius && !newStatus[index]) {
           // Checkpoint passed!
@@ -707,20 +513,15 @@ export default function RaceView({
         if (!newStatus[index]) allPassed = false;
       });
 
-      gameState.current.checkpointsPassed = newStatus;
+      carPhysics.current.checkpointsPassed = newStatus;
       setCheckpointStatus(newStatus);
 
       // Check finish line only if all checkpoints passed
-      if (allPassed && !gameState.current.raceComplete) {
-        const finishDistance = calculateDistance(carPosition, finishPos);
+      if (allPassed && !carPhysics.current.raceComplete) {
+        const finishDistance = carPhysics.current.calculateDistance(carPosition, finishPos);
         if (finishDistance < checkpointRadius) {
           // Race complete!
-          gameState.current.raceComplete = true;
-          gameState.current.raceFinishTime = performance.now();
-          const totalTime =
-            (gameState.current.raceFinishTime -
-              gameState.current.raceStartTime) /
-            1000;
+          const totalTime = carPhysics.current.completeRace();
           setRaceTime(totalTime);
           setRaceComplete(true);
 
@@ -743,18 +544,14 @@ export default function RaceView({
       }
     } else {
       // No checkpoints, just check finish line
-      const finishDistance = calculateDistance(carPosition, finishPos);
+      const finishDistance = carPhysics.current.calculateDistance(carPosition, finishPos);
 
       if (
         finishDistance < checkpointRadius &&
-        !gameState.current.raceComplete
+        !carPhysics.current.raceComplete
       ) {
         // Race complete!
-        gameState.current.raceComplete = true;
-        gameState.current.raceFinishTime = performance.now();
-        const totalTime =
-          (gameState.current.raceFinishTime - gameState.current.raceStartTime) /
-          1000;
+        const totalTime = carPhysics.current.completeRace();
         setRaceTime(totalTime);
         setRaceComplete(true);
 
@@ -777,80 +574,16 @@ export default function RaceView({
     }
   };
 
-  // Function to check if car is on the route
-  const isCarOnRoute = (carPosition, routeCoords) => {
-    if (!routeCoords || routeCoords.length < 2) return true;
-
-    // For direct line segments, we need to find the closest line segment
-    let minDistance = Infinity;
-
-    // Check each segment of the route
-    for (let i = 0; i < routeCoords.length - 1; i++) {
-      const start = routeCoords[i];
-      const end = routeCoords[i + 1];
-
-      // Calculate the distance from the car to this line segment
-      const distance = distanceToLineSegment(
-        carPosition[0],
-        carPosition[1],
-        start[0],
-        start[1],
-        end[0],
-        end[1]
-      );
-
-      minDistance = Math.min(minDistance, distance);
-    }
-
-    // Define max allowed distance from route (adjust as needed)
-    // This is the width of the invisible wall corridor
-    const maxDistanceFromRoute = 0.0003; // ~30-40 meters depending on latitude - much wider corridor
-
-    return minDistance <= maxDistanceFromRoute;
-  };
-
-  // Helper function to calculate distance from a point to a line segment
-  const distanceToLineSegment = (px, py, x1, y1, x2, y2) => {
-    const A = px - x1;
-    const B = py - y1;
-    const C = x2 - x1;
-    const D = y2 - y1;
-
-    const dot = A * C + B * D;
-    const lenSq = C * C + D * D;
-    let param = -1;
-
-    if (lenSq !== 0) param = dot / lenSq;
-
-    let xx, yy;
-
-    if (param < 0) {
-      xx = x1;
-      yy = y1;
-    } else if (param > 1) {
-      xx = x2;
-      yy = y2;
-    } else {
-      xx = x1 + param * C;
-      yy = y1 + param * D;
-    }
-
-    const dx = px - xx;
-    const dy = py - yy;
-
-    return Math.sqrt(dx * dx + dy * dy);
-  };
-
   useEffect(() => {
     // Initialize map
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
       style: "mapbox://styles/mapbox/standard",
-      center: gameState.current.carPosition,
+      center: carPhysics.current.carPosition,
       zoom: 21,
       pitch: 55,
-      bearing: (gameState.current.carHeading * 180) / Math.PI, // Use car's heading in degrees
-      antialias: true,
+      bearing: (carPhysics.current.carHeading * 180) / Math.PI, // Use car's heading in degrees
+      antialias: false,
       config: {
         basemap: {
           lightPreset: lightPreset, // dawn, day, dusk, or night
@@ -862,14 +595,15 @@ export default function RaceView({
     mapRef.current = map;
 
     map.on("load", () => {
-      // Add DEM source
-      map.addSource("mapbox-dem", {
-        type: "raster-dem",
-        url: "mapbox://mapbox.mapbox-terrain-dem-v1",
-        tileSize: 512,
-        maxzoom: 14,
+      // Add fog for view distance optimization
+      map.setFog({
+        color: "rgb(220, 220, 230)", // Light fog color
+        "high-color": "rgb(180, 180, 200)", // Sky color
+        "horizon-blend": 0.2, // Smooth transition between fog and sky
+        "space-color": "rgb(140, 150, 180)", // Upper atmosphere
+        "star-intensity": 0.15, // Slight star visibility
+        range: [1, 8], // Start and end distances for fog effect (in km)
       });
-      map.setTerrain({ source: "mapbox-dem", exaggeration: 1.0 });
 
       // (Optional) 3D buildings if the style has a "composite" source
       if (map.getSource("composite")) {
@@ -880,6 +614,7 @@ export default function RaceView({
           filter: ["==", ["get", "extrude"], "true"],
           type: "fill-extrusion",
           minzoom: 15,
+          maxzoom: 15,
           paint: {
             "fill-extrusion-color": "#aaa",
             "fill-extrusion-height": ["get", "height"],
@@ -959,7 +694,7 @@ export default function RaceView({
               this.carModel.position.y += 2;
 
               this.scene.add(this.carModel);
-              gameState.current.modelLoaded = true;
+              carPhysics.current.modelLoaded = true;
               setModelLoaded(true);
             },
             undefined,
@@ -968,53 +703,11 @@ export default function RaceView({
             }
           );
 
-          // Load second car model
-          loader.load(
-            "./models/low_poly_nissan_gtr.glb", // Using the same model, could be different
-            (gltf) => {
-              this.secondCarModel = gltf.scene.clone();
-              this.secondCarModel.scale.set(1, 1, 1);
-
-              // Center the model
-              const box = new THREE.Box3().setFromObject(this.secondCarModel);
-              const center = box.getCenter(new THREE.Vector3());
-              this.secondCarModel.position.sub(center);
-
-              // Raise it slightly
-              this.secondCarModel.position.y += 2;
-
-              // Make the second car a different color
-              this.secondCarModel.traverse((child) => {
-                if (child.isMesh && child.material) {
-                  if (Array.isArray(child.material)) {
-                    child.material = child.material.map((mat) => {
-                      const newMat = mat.clone();
-                      newMat.color.set(0x3366ff); // Blue color
-                      return newMat;
-                    });
-                  } else {
-                    const newMat = child.material.clone();
-                    newMat.color.set(0x3366ff); // Blue color
-                    child.material = newMat;
-                  }
-                }
-              });
-
-              this.scene.add(this.secondCarModel);
-              gameState.current.secondCarModelLoaded = true;
-              setSecondCarModelLoaded(true);
-            },
-            undefined,
-            (error) => {
-              console.error("Error loading second car model:", error);
-            }
-          );
-
           // Renderer
           this.renderer = new THREE.WebGLRenderer({
             canvas: map.getCanvas(),
             context: gl,
-            antialias: true,
+            antialias: false,
           });
           this.renderer.autoClear = false;
         },
@@ -1023,14 +716,7 @@ export default function RaceView({
           // Skip rendering if primary car model isn't loaded
           if (!this.carModel) return;
 
-          const {
-            carPosition,
-            carHeading,
-            secondCarPosition,
-            secondCarHeading,
-          } = gameState.current;
-
-          // Primary car elevation
+          const { carPosition, carHeading } = carPhysics.current;
           const elevation = map.queryTerrainElevation(carPosition) || 0;
 
           // ====== TERRAIN TILT LOGIC - PRIMARY CAR ======
@@ -1153,91 +839,6 @@ export default function RaceView({
           this.renderer.resetState();
           this.renderer.render(this.scene, this.camera);
 
-          // ====== SECOND CAR RENDERING ======
-          // Only render if the second car model is loaded
-          if (this.secondCarModel) {
-            // Get second car elevation
-            const secondCarElevation =
-              map.queryTerrainElevation(secondCarPosition) || 0;
-
-            // Calculate terrain tilt for second car (same process as for primary car)
-            const sinH2 = Math.sin(secondCarHeading);
-            const cosH2 = Math.cos(secondCarHeading);
-
-            // Forward/Back coords for second car
-            const frontCoord2 = [
-              secondCarPosition[0] + sampleDistDeg * sinH2,
-              secondCarPosition[1] + sampleDistDeg * cosH2,
-            ];
-            const backCoord2 = [
-              secondCarPosition[0] - sampleDistDeg * sinH2,
-              secondCarPosition[1] - sampleDistDeg * cosH2,
-            ];
-
-            // Right/Left coords for second car
-            const rightCoord2 = [
-              secondCarPosition[0] + sampleDistDeg * cosH2,
-              secondCarPosition[1] - sampleDistDeg * sinH2,
-            ];
-            const leftCoord2 = [
-              secondCarPosition[0] - sampleDistDeg * cosH2,
-              secondCarPosition[1] + sampleDistDeg * sinH2,
-            ];
-
-            // Sample elevation at points around second car
-            const elevFront2 = map.queryTerrainElevation(frontCoord2) || 0;
-            const elevBack2 = map.queryTerrainElevation(backCoord2) || 0;
-            const elevLeft2 = map.queryTerrainElevation(leftCoord2) || 0;
-            const elevRight2 = map.queryTerrainElevation(rightCoord2) || 0;
-
-            // Calculate pitch and roll for second car
-            const pitchSlope2 = (elevFront2 - elevBack2) / (2 * distMeters);
-            const pitchAngle2 = Math.atan(pitchSlope2);
-
-            const rollSlope2 = (elevRight2 - elevLeft2) / (2 * distMeters);
-            const rollAngle2 = Math.atan(rollSlope2);
-
-            // Build the model matrix for the second car
-            const merc2 = mapboxgl.MercatorCoordinate.fromLngLat(
-              secondCarPosition,
-              secondCarElevation
-            );
-
-            const translateMatrix2 = new THREE.Matrix4().makeTranslation(
-              merc2.x,
-              merc2.y,
-              merc2.z
-            );
-
-            const headingMatrix2 = new THREE.Matrix4().makeRotationZ(
-              secondCarHeading
-            );
-            const pitchMatrix2 = new THREE.Matrix4().makeRotationX(pitchAngle2);
-            const rollMatrix2 = new THREE.Matrix4().makeRotationY(rollAngle2);
-
-            let modelMatrix2 = new THREE.Matrix4();
-            modelMatrix2
-              .multiply(translateMatrix2)
-              .multiply(scaleMatrix) // Reuse the scale from primary car
-              .multiply(headingMatrix2)
-              .multiply(pitchMatrix2)
-              .multiply(rollMatrix2)
-              .multiply(rotationXupright);
-
-            // Update the second car's position
-            this.secondCarModel.position.copy(this.carModel.position.clone());
-            this.secondCarModel.rotation.copy(this.carModel.rotation.clone());
-
-            // Apply the second car's model matrix to the camera
-            const projectionMatrix2 = new THREE.Matrix4().fromArray(matrix);
-            this.camera.projectionMatrix =
-              projectionMatrix2.multiply(modelMatrix2);
-
-            // Render the second car
-            this.renderer.resetState();
-            this.renderer.render(this.scene, this.camera);
-          }
-
           map.triggerRepaint();
         },
       });
@@ -1278,7 +879,7 @@ export default function RaceView({
       const control = keyMap[e.key];
       if (control) {
         e.preventDefault();
-        gameState.current.controls[control] = true;
+        carPhysics.current.setControl(control, true);
         setDebugInfo((prev) => {
           const newActiveKeys = [...prev.activeKeys];
           if (!newActiveKeys.includes(e.key)) newActiveKeys.push(e.key);
@@ -1291,7 +892,7 @@ export default function RaceView({
       const control = keyMap[e.key];
       if (control) {
         e.preventDefault();
-        gameState.current.controls[control] = false;
+        carPhysics.current.setControl(control, false);
         setDebugInfo((prev) => {
           const newActiveKeys = prev.activeKeys.filter((k) => k !== e.key);
           return { ...prev, activeKeys: newActiveKeys };
@@ -1318,18 +919,25 @@ export default function RaceView({
     if (!isMapLoaded || !raceStarted) return;
 
     // Start the race timer
-    if (gameState.current.raceStartTime === 0) {
-      gameState.current.raceStartTime = performance.now();
+    if (carPhysics.current.raceStartTime === 0) {
+      carPhysics.current.startRaceTimer();
     }
 
     let animationId;
 
     const gameLoop = (timestamp) => {
-      const state = gameState.current;
+      const state = carPhysics.current;
 
       const deltaTime = state.lastFrame ? timestamp - state.lastFrame : 16.67;
       state.lastFrame = timestamp;
       const dt = Math.min(deltaTime, 100) / 1000;
+
+      // Track frame times for FPS calculation
+      frameTimesRef.current.push(deltaTime);
+      // Keep only the last 20 frames for averaging
+      if (frameTimesRef.current.length > 20) {
+        frameTimesRef.current.shift();
+      }
 
       // Key hold durations
       if (state.controls.forward) state.keyHoldDuration.forward += dt;
@@ -1392,220 +1000,31 @@ export default function RaceView({
         }
       }
 
-      // Physics
-      const mapUnitToMeter = 111000;
-      const meterToMapUnit = 1 / mapUnitToMeter;
-      const speedMS = state.carSpeed * mapUnitToMeter;
-
-      let tractionForce = 0;
-      if (state.forwardImpulse > 0) {
-        const maxForce = (state.enginePower * 746) / Math.max(1, speedMS * 3.6);
-        tractionForce = maxForce * state.forwardImpulse;
+      // Calculate average FPS every 10 frames
+      if (timestamp % 100 < 16) {
+        const avgFrameTime = frameTimesRef.current.reduce((acc, time) => acc + time, 0) /
+          frameTimesRef.current.length;
+        const calculatedFps = Math.round(1000 / avgFrameTime);
+        setFps(calculatedFps);
       }
 
-      let brakeForce = 0;
-      if (state.backwardImpulse > 0) {
-        if (speedMS > 0.2) {
-          brakeForce = state.brakingForce * state.backwardImpulse;
-        } else if (speedMS > -0.5) {
-          // Reverse
-          tractionForce = -state.enginePower * 200 * state.backwardImpulse;
+
+      // Update car physics
+      const handleOffTrack = () => {
+        if (!offTrackWarning) {
+          setOffTrackWarning(true);
+          setTimeout(() => setOffTrackWarning(false), 1000);
         }
-      }
+      };
 
-      const dragForce =
-        state.dragCoefficient * speedMS * speedMS * Math.sign(speedMS);
-      const rollingForce =
-        state.rollingResistance * speedMS * Math.sign(speedMS);
-      const naturalBrakingForce =
-        state.frictionCoefficient * 12 * Math.sign(speedMS);
-
-      const inputActive = state.forwardImpulse > 0 || state.backwardImpulse > 0;
-      const decelMultiplier = inputActive ? 1.0 : 2.5;
-      const decelForce =
-        (dragForce + rollingForce + naturalBrakingForce) * decelMultiplier;
-
-      const totalForce = tractionForce - brakeForce - decelForce;
-      const accel = totalForce / state.mass;
-
-      let newSpeedMS = speedMS + accel * dt;
-      if (Math.abs(newSpeedMS) < 0.3) {
-        newSpeedMS = 0;
-      }
-
-      state.carSpeed = newSpeedMS * meterToMapUnit;
-      if (state.carSpeed > state.maxSpeed) {
-        state.carSpeed = state.maxSpeed;
-      } else if (state.carSpeed < -state.maxSpeed / 2) {
-        state.carSpeed = -state.maxSpeed / 2;
-      }
-
-      // Turning
-      if (
-        Math.abs(state.carSpeed) > 1e-9 &&
-        Math.abs(state.steeringAngle) > 1e-5
-      ) {
-        const turnRadius =
-          state.wheelbase / Math.sin(Math.abs(state.steeringAngle));
-        const angularVelocity = (state.carSpeed * mapUnitToMeter) / turnRadius;
-        state.carHeading +=
-          angularVelocity *
-          dt *
-          Math.sign(state.steeringAngle) *
-          Math.sign(state.carSpeed);
-
-        state.carHeading %= 2 * Math.PI;
-        if (state.carHeading < 0) state.carHeading += 2 * Math.PI;
-      }
-
-      // Update position
-      if (Math.abs(state.carSpeed) > 1e-9) {
-        const vx = state.carSpeed * Math.sin(state.carHeading);
-        const vy = state.carSpeed * Math.cos(state.carHeading);
-
-        const inertiaFactor = 0.85;
-        if (!state.carVelocity[0] && !state.carVelocity[1]) {
-          state.carVelocity = [vx, vy];
-        } else {
-          state.carVelocity = [
-            vx * (1 - inertiaFactor) + state.carVelocity[0] * inertiaFactor,
-            vy * (1 - inertiaFactor) + state.carVelocity[1] * inertiaFactor,
-          ];
-        }
-
-        const tentativeNewPos = [
-          state.carPosition[0] + state.carVelocity[0],
-          state.carPosition[1] + state.carVelocity[1],
-        ];
-
-        // Re-enable the wall check with our improved distance calculation
-        if (
-          routeCoordinates &&
-          routeCoordinates.length > 0 &&
-          !isCarOnRoute(tentativeNewPos, routeCoordinates)
-        ) {
-          // Car is trying to go off-route - prevent it
-          // Reduce speed significantly
-          state.carSpeed *= 0.2;
-
-          // Show warning if not already showing
-          if (!offTrackWarning) {
-            setOffTrackWarning(true);
-            setTimeout(() => setOffTrackWarning(false), 1000);
-          }
-
-          // Keep car at current position with minimal movement
-          // This creates a "sliding along wall" effect
-          const bounceBackFactor = 0.02;
-          state.carPosition = [
-            state.carPosition[0] + state.carVelocity[0] * bounceBackFactor,
-            state.carPosition[1] + state.carVelocity[1] * bounceBackFactor,
-          ];
-        } else {
-          // Car is on route or no route loaded yet, proceed with normal movement
-          state.carPosition = tentativeNewPos;
-        }
-      }
-
-      // ===== SECOND CAR AI LOGIC =====
-      // Calculate the vector from second car to primary car
-      const dx = state.carPosition[0] - state.secondCarPosition[0];
-      const dy = state.carPosition[1] - state.secondCarPosition[1];
-
-      // Distance between cars
-      const distanceBetweenCars = Math.sqrt(dx * dx + dy * dy);
-
-      // Target direction toward primary car
-      const targetHeading = Math.atan2(dx, dy);
-
-      // Gradually adjust second car heading toward target
-      const headingDiff =
-        ((targetHeading - state.secondCarHeading + Math.PI * 3) %
-          (Math.PI * 2)) -
-        Math.PI;
-      state.secondCarHeading += headingDiff * 2.5 * dt; // Steering factor, higher = more responsive
-
-      // Normalize heading
-      state.secondCarHeading %= 2 * Math.PI;
-      if (state.secondCarHeading < 0) state.secondCarHeading += 2 * Math.PI;
-
-      // Calculate target speed based on distance to primary car
-      let targetSpeed;
-
-      // If too close, slow down or back up
-      const minDistance = state.secondCarDistance * 0.7;
-      const idealDistance = state.secondCarDistance;
-      const maxDistance = state.secondCarDistance * 1.5;
-
-      if (distanceBetweenCars < minDistance) {
-        // Too close, back up slightly
-        targetSpeed = -state.maxSpeed * 0.3;
-      } else if (distanceBetweenCars > maxDistance) {
-        // Too far, speed up to catch up
-        targetSpeed = state.maxSpeed * 1.1; // Slightly faster to catch up
-      } else if (distanceBetweenCars > idealDistance) {
-        // Slightly too far, adjust speed proportionally
-        const speedFactor = Math.min(
-          1.0,
-          (distanceBetweenCars - idealDistance) / (maxDistance - idealDistance)
-        );
-        targetSpeed = state.carSpeed * (1 + speedFactor * 0.2);
-      } else {
-        // Within acceptable range, match primary car's speed
-        targetSpeed = state.carSpeed * 0.95; // Slightly slower to maintain distance
-      }
-
-      // Gradually adjust second car speed
-      state.secondCarSpeed =
-        state.secondCarSpeed + (targetSpeed - state.secondCarSpeed) * 2 * dt;
-
-      // Ensure speed is within limits
-      if (state.secondCarSpeed > state.maxSpeed * 1.1) {
-        state.secondCarSpeed = state.maxSpeed * 1.1;
-      } else if (state.secondCarSpeed < -state.maxSpeed / 2) {
-        state.secondCarSpeed = -state.maxSpeed / 2;
-      }
-
-      // Update second car position
-      if (Math.abs(state.secondCarSpeed) > 1e-9) {
-        const vx2 = state.secondCarSpeed * Math.sin(state.secondCarHeading);
-        const vy2 = state.secondCarSpeed * Math.cos(state.secondCarHeading);
-
-        state.secondCarVelocity = [vx2, vy2];
-
-        const tentativeNewPos2 = [
-          state.secondCarPosition[0] + state.secondCarVelocity[0],
-          state.secondCarPosition[1] + state.secondCarVelocity[1],
-        ];
-
-        // Check if second car would go off route
-        if (
-          routeCoordinates &&
-          routeCoordinates.length > 0 &&
-          !isCarOnRoute(tentativeNewPos2, routeCoordinates)
-        ) {
-          // Second car is trying to go off-route - reduce speed
-          state.secondCarSpeed *= 0.2;
-
-          // Minimal movement with bounce-back effect
-          const bounceBackFactor = 0.02;
-          state.secondCarPosition = [
-            state.secondCarPosition[0] +
-              state.secondCarVelocity[0] * bounceBackFactor,
-            state.secondCarPosition[1] +
-              state.secondCarVelocity[1] * bounceBackFactor,
-          ];
-        } else {
-          // Second car is on route, proceed with normal movement
-          state.secondCarPosition = tentativeNewPos2;
-        }
-      }
+      // Update physics and get new state
+      const carState = carPhysics.current.update(dt, routeCoordinates, handleOffTrack);
 
       // Move camera with the car
       if (mapRef.current) {
-        const headingDeg = ((state.carHeading * 180) / Math.PI) % 360;
+        const headingDeg = ((carState.heading * 180) / Math.PI) % 360;
         mapRef.current.jumpTo({
-          center: state.carPosition,
+          center: carState.position,
           bearing: headingDeg,
           pitch: 75,
         });
@@ -1616,16 +1035,16 @@ export default function RaceView({
       if (timestamp % 200 < 16) {
         setDebugInfo((prev) => ({
           ...prev,
-          position: [...state.carPosition],
-          heading: state.carHeading,
-          speed: state.carSpeed,
+          position: [...carState.position],
+          heading: carState.heading,
+          speed: carState.speed,
         }));
       }
 
       // Update race time if race is ongoing
-      if (!state.raceComplete) {
+      if (!carPhysics.current.raceComplete) {
         const currentRaceTime =
-          (performance.now() - state.raceStartTime) / 1000;
+          (performance.now() - carPhysics.current.raceStartTime) / 1000;
         if (timestamp % 100 < 16) {
           // Update UI ~10 times/sec
           setRaceTime(currentRaceTime);
@@ -1668,6 +1087,13 @@ export default function RaceView({
         </div>
       )}
 
+      {/* FPS counter - always visible during gameplay */}
+      {raceStarted && (
+        <div className="absolute top-4 left-4 bg-black bg-opacity-60 text-white px-2 py-1 rounded-lg text-sm">
+          <div className="font-mono">{fps} FPS</div>
+        </div>
+      )}
+
       {/* Race timer UI */}
       {raceStarted && !raceComplete && (
         <div className="absolute top-4 right-4 bg-black bg-opacity-60 text-white p-3 rounded-lg">
@@ -1703,9 +1129,8 @@ export default function RaceView({
                 {checkpointStatus.map((passed, index) => (
                   <div
                     key={index}
-                    className={`w-4 h-4 rounded-full ${
-                      passed ? "bg-green-500" : "bg-gray-500"
-                    }`}
+                    className={`w-4 h-4 rounded-full ${passed ? "bg-green-500" : "bg-gray-500"
+                      }`}
                     title={`Checkpoint ${index + 1}`}
                   ></div>
                 ))}

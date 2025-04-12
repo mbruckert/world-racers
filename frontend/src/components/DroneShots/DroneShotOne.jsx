@@ -52,20 +52,20 @@ export default function DroneShotOne({
     mapRef.current.on("style.load", () => {
       const map = mapRef.current;
 
-      // Add fog effect
       map.setFog({
         color: "rgb(186, 210, 235)", // light blue
         "high-color": "rgb(36, 92, 223)", // blue
         "horizon-blend": 0.02,
         "space-color": "rgb(11, 11, 25)", // dark blue-black
         "star-intensity": 0.6, // brightness of stars (0-1)
+        range: [1, 8], // Start and end distances for fog effect (in km)
       });
 
       // Add terrain
       map.addSource("mapbox-dem", {
         type: "raster-dem",
-        url: "mapbox://mapbox.mapbox-terrain-dem-v1",
-        tileSize: 512,
+        url: "mapbox://mapbox.mapbox-terrain-dem-v1?optimize=true",
+        tileSize: 256,
         maxzoom: 14,
       });
       map.setTerrain({ source: "mapbox-dem", exaggeration: 1.5 });
