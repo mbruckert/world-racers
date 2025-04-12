@@ -54,13 +54,7 @@ async fn me(
         .headers()
         .get(header::AUTHORIZATION)
         .and_then(|header| header.to_str().ok())
-        .and_then(|value| {
-            if value.starts_with("Bearer ") {
-                Some(value[7..].to_owned())
-            } else {
-                None
-            }
-        })
+        .and_then(|value| value.strip_prefix("Bearer ").map(|s| s.to_owned()))
         .ok_or((
             StatusCode::UNAUTHORIZED,
             "No authorization token provided".to_string(),
