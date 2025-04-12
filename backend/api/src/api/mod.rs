@@ -1,0 +1,24 @@
+mod health;
+mod ws;
+
+use axum::{
+    routing::{get, post},
+    Router,
+};
+use tower_http::cors::{Any, CorsLayer};
+
+use crate::db::AppState;
+
+pub fn create_router(state: AppState) -> Router {
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
+    // Create router with empty state first, then add real state at the end
+    Router::new()
+        .nest("/api", health::router())
+        .nest("/api", ws::router())
+        .layer(cors)
+        .with_state(state)
+} 

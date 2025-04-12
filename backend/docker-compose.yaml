@@ -23,16 +23,21 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-#  backend:
-#    build:
-#      context: .
-#      dockerfile: Dockerfile
-#    environment:
-#      POSTGRES_USER: ${POSTGRES_USER}
-#      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-#      POSTGRES_DB: ${POSTGRES_DB}
-#      REDIS_HOST: ${REDIS_HOST}
-#      REDIS_PORT: ${REDIS_PORT}
+  backend:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    environment:
+      DATABASE_URL: ${DOCKER_DATABASE_URL}
+      REDIS_HOST: ${DOCKER_REDIS_HOST}
+      REDIS_PORT: ${DOCKER_REDIS_PORT}
+      SERVER_HOST: ${SERVER_HOST}
+      SERVER_PORT: ${SERVER_PORT}
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "${SERVER_PORT}:${SERVER_PORT}"
 
 volumes:
   postgres_data:

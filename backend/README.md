@@ -6,7 +6,7 @@
 cp .env.example .env
 ```
 
-Modify the `.env` file with your own values.
+Modify the `.env` file with your own values. If you change the postgres values, make sure to update the `DATABASE_URL` variable in the `.env` file.
 
 ### Using env vars
 
