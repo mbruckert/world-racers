@@ -8,11 +8,14 @@ mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_API_KEY;
 export default function DroneShotOne({
   startPosition,
   endPosition,
+  checkpoints = [],
+  locationName = "Unknown Location",
   onAnimationComplete,
 }) {
   const mapContainerRef = useRef();
   const mapRef = useRef();
   const [loadingProgress, setLoadingProgress] = useState(0);
+  const [showLocationName, setShowLocationName] = useState(false);
 
   useEffect(() => {
     // Use provided coordinates or defaults if not available
@@ -39,6 +42,11 @@ export default function DroneShotOne({
       bearing: -177.2,
       style: "mapbox://styles/mapbox/standard",
       interactive: false,
+      config: {
+        baseMap: {
+          lightPreset: "dusk",
+        },
+      },
     });
 
     mapRef.current.on("style.load", () => {
@@ -62,12 +70,54 @@ export default function DroneShotOne({
       });
       map.setTerrain({ source: "mapbox-dem", exaggeration: 1.5 });
 
-      // Add start and end markers
+      // Create waypoints array for the route including checkpoints
+      const waypoints = [start];
+
+      // Add all checkpoints in their original order
+      if (checkpoints && checkpoints.length > 0) {
+        waypoints.push(...checkpoints);
+      }
+
+      // Add end position as the last point
+      waypoints.push(end);
+
+      // Log for debugging
+      console.log("DroneShotOne - Route waypoints:", waypoints);
+
+      // Add markers for start, checkpoints, and end
       new mapboxgl.Marker({ color: "#00FF00" }).setLngLat(start).addTo(map);
+
+      // Add checkpoint markers
+      if (checkpoints && checkpoints.length > 0) {
+        checkpoints.forEach((checkpoint, index) => {
+          // Create a DOM element for the marker
+          const el = document.createElement("div");
+          el.className = "checkpoint-marker";
+          el.style.backgroundColor = "#ffdd00";
+          el.style.width = "20px";
+          el.style.height = "20px";
+          el.style.borderRadius = "50%";
+          el.style.border = "3px solid #ff9900";
+          el.style.boxShadow = "0 0 10px rgba(255, 217, 0, 0.7)";
+
+          // Add checkpoint number
+          const label = document.createElement("div");
+          label.textContent = (index + 1).toString();
+          label.style.color = "#000";
+          label.style.fontWeight = "bold";
+          label.style.fontSize = "12px";
+          label.style.textAlign = "center";
+          label.style.lineHeight = "20px";
+          el.appendChild(label);
+
+          // Add marker to map
+          new mapboxgl.Marker(el).setLngLat(checkpoint).addTo(map);
+        });
+      }
 
       new mapboxgl.Marker({ color: "#FF0000" }).setLngLat(end).addTo(map);
 
-      // Add a line for the route
+      // Add a line for the complete route
       map.addSource("route", {
         type: "geojson",
         data: {
@@ -75,13 +125,14 @@ export default function DroneShotOne({
           properties: {},
           geometry: {
             type: "LineString",
-            coordinates: [start, end],
+            coordinates: waypoints,
           },
         },
       });
 
+      // Add route layer - a glowing effect with two lines (similar to RaceView)
       map.addLayer({
-        id: "route",
+        id: "route-glow",
         type: "line",
         source: "route",
         layout: {
@@ -89,9 +140,26 @@ export default function DroneShotOne({
           "line-cap": "round",
         },
         paint: {
-          "line-color": "#3B82F6",
-          "line-width": 8,
-          "line-opacity": 0.8,
+          "line-color": "#4882c5",
+          "line-width": 12,
+          "line-opacity": 0.6,
+          "line-blur": 3,
+        },
+      });
+
+      map.addLayer({
+        id: "route-core",
+        type: "line",
+        source: "route",
+        layout: {
+          "line-join": "round",
+          "line-cap": "round",
+        },
+        paint: {
+          "line-color": "#2b98f0",
+          "line-width": 4,
+          "line-dasharray": [0.5, 1.5],
+          "line-opacity": 0.7,
         },
       });
 
@@ -273,16 +341,53 @@ export default function DroneShotOne({
       window.requestAnimationFrame(frame);
     });
 
+    // Show location name with delay for a nice entrance effect
+    setTimeout(() => {
+      setShowLocationName(true);
+    }, 1000);
+
     return () => {
       if (mapRef.current) {
         mapRef.current.remove();
       }
     };
-  }, [startPosition, endPosition, onAnimationComplete]);
+  }, [startPosition, endPosition, checkpoints, onAnimationComplete]);
 
   return (
     <div className="relative w-full h-full">
       <div id="map" ref={mapContainerRef} style={{ height: "100%" }}></div>
+
+      {/* Location Name Overlay with Gradient */}
+      <div
+        className="absolute top-0 left-0 w-full pointer-events-none"
+        style={{
+          background:
+            "linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.6) 30%, rgba(0,0,0,0.3) 60%, rgba(0,0,0,0) 100%)",
+          height: "300px",
+          zIndex: 10,
+        }}
+      >
+        <div
+          className={`flex flex-col items-start justify-start p-10 transition-all duration-1000 ease-out ${
+            showLocationName
+              ? "opacity-100 translate-y-0"
+              : "opacity-0 -translate-y-10"
+          }`}
+        >
+          <div className="flex flex-col">
+            <span className="text-blue-300 text-sm font-medium uppercase tracking-widest mb-1">
+              Now Racing in...
+            </span>
+            <h2 className="text-5xl font-extrabold text-white tracking-wide leading-tight">
+              {locationName}
+            </h2>
+            <div className="flex items-center mt-3">
+              <div className="h-1 w-24 bg-gradient-to-r from-blue-500 to-blue-300 rounded-full"></div>
+              <div className="h-1 w-12 bg-gradient-to-r from-blue-300 to-transparent rounded-full ml-1"></div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {loadingProgress < 100 && (
         <div className="absolute inset-0 bg-black bg-opacity-70 flex items-center justify-center">

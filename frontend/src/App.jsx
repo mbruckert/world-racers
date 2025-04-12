@@ -8,6 +8,7 @@ function App() {
   const [startPosition, setStartPosition] = useState(null);
   const [endPosition, setEndPosition] = useState(null);
   const [checkpoints, setCheckpoints] = useState([]);
+  const [locationName, setLocationName] = useState("");
   const [flowState, setFlowState] = useState("building"); // building, preview, racing
   const [error, setError] = useState("");
 
@@ -16,7 +17,17 @@ function App() {
     setError("");
   }, [flowState]);
 
-  const handleRouteSubmit = (start, end, checkpoints) => {
+  const handleRouteSubmit = (routeData) => {
+    // Extract route data from the object that MapBuilder now sends
+    const {
+      startPosition: start,
+      finishPosition: end,
+      checkpoints: waypoints,
+      locationName: location,
+    } = routeData;
+
+    console.log("App received route data:", routeData);
+
     if (!start || !end) {
       setError("Missing start or end position. Please select both on the map.");
       return;
@@ -24,7 +35,8 @@ function App() {
 
     setStartPosition(start);
     setEndPosition(end);
-    setCheckpoints(checkpoints || []);
+    setCheckpoints(waypoints || []);
+    setLocationName(location || "");
     setFlowState("preview");
   };
 
@@ -60,6 +72,8 @@ function App() {
           <DroneShotOne
             startPosition={startPosition}
             endPosition={endPosition}
+            checkpoints={checkpoints}
+            locationName={locationName}
             onAnimationComplete={handlePreviewComplete}
           />
           <button
@@ -73,7 +87,11 @@ function App() {
 
       {flowState === "racing" && (
         <div className="relative h-full">
-          <RaceView startPosition={startPosition} />
+          <RaceView
+            startPosition={startPosition}
+            finishPosition={endPosition}
+            checkpoints={checkpoints}
+          />
           <button
             onClick={resetFlow}
             className="absolute top-4 right-4 bg-indigo-600 text-white px-4 py-2 rounded-lg shadow"

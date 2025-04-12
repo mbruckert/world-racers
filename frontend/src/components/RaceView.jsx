@@ -7,18 +7,55 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 // Access token
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_API_KEY;
 
-export default function RaceView({ startPosition }) {
+// Define keyframe animations
+const flashAnimationStyle = `
+@keyframes flash {
+  0% { opacity: 0.7; }
+  100% { opacity: 0; }
+}
+`;
+
+export default function RaceView({
+  startPosition,
+  finishPosition,
+  checkpoints = [],
+}) {
+  // Remove debug logs
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [modelLoaded, setModelLoaded] = useState(false);
   const [countdown, setCountdown] = useState(3);
   const [raceStarted, setRaceStarted] = useState(false);
+  const [routeLoaded, setRouteLoaded] = useState(false);
+  const [routeCoordinates, setRouteCoordinates] = useState([]);
+  const [offTrackWarning, setOffTrackWarning] = useState(false);
+  const [optimizedCheckpoints, setOptimizedCheckpoints] = useState([]);
 
   // Initialize carPosition from props or default
   const initialPosition = useMemo(() => {
-    return startPosition || [-81.1989, 28.6024];
+    const result = startPosition || [-81.1989, 28.6024];
+    return result;
   }, [startPosition]);
+
+  // Default finish position if not provided
+  const defaultFinishPosition = useMemo(() => {
+    // Check if finishPosition is defined and has valid coordinates
+    const isValid =
+      finishPosition &&
+      Array.isArray(finishPosition) &&
+      finishPosition.length === 2 &&
+      typeof finishPosition[0] === "number" &&
+      typeof finishPosition[1] === "number";
+
+    const result = isValid ? finishPosition : [-81.197, 28.6035];
+    return result;
+  }, [finishPosition]);
+
+  // Directly reference the finish position for clarity
+  const actualFinishPosition = useMemo(() => {
+    return finishPosition || defaultFinishPosition;
+  }, [finishPosition, defaultFinishPosition]);
 
   // Game state
   const gameState = useRef({
@@ -70,6 +107,15 @@ export default function RaceView({ startPosition }) {
 
     // Model info
     modelLoaded: false,
+
+    // Race progress tracking
+    checkpointsPassed: [],
+    raceComplete: false,
+    raceStartTime: 0,
+    raceFinishTime: 0,
+
+    // Store the finish position to use consistently throughout the app
+    actualFinishPosition: null, // Will be initialized in useEffect
   });
 
   // Debug UI state
@@ -78,7 +124,121 @@ export default function RaceView({ startPosition }) {
     heading: 0,
     speed: 0,
     activeKeys: [],
+    checkpointStatus: [],
+    raceTime: 0,
+    routeDistance: 0,
   });
+
+  // Race progress state
+  const [checkpointStatus, setCheckpointStatus] = useState([]);
+  const [raceComplete, setRaceComplete] = useState(false);
+  const [raceTime, setRaceTime] = useState(0);
+
+  // Initialize checkpoint status and finish position
+  useEffect(() => {
+    // Ensure we're using consistent finish position
+    gameState.current.actualFinishPosition = actualFinishPosition;
+
+    // Calculate initial heading toward first checkpoint or finish
+    let initialHeading = 0;
+    if (checkpoints && checkpoints.length > 0) {
+      // Head toward first checkpoint
+      const dx = checkpoints[0][0] - initialPosition[0];
+      const dy = checkpoints[0][1] - initialPosition[1];
+      initialHeading = Math.atan2(dx, dy);
+    } else if (actualFinishPosition) {
+      // Head toward finish position
+      const dx = actualFinishPosition[0] - initialPosition[0];
+      const dy = actualFinishPosition[1] - initialPosition[1];
+      initialHeading = Math.atan2(dx, dy);
+    }
+
+    // Set initial car heading
+    gameState.current.carHeading = initialHeading;
+
+    // Apply initial bearing to map if map is ready
+    if (mapRef.current) {
+      mapRef.current.jumpTo({
+        bearing: (initialHeading * 180) / Math.PI,
+      });
+    }
+
+    if (checkpoints && checkpoints.length > 0) {
+      // Create orderedCheckpoints array with properly formatted data
+      const orderedCheckpoints = checkpoints.map((checkpoint, index) => ({
+        position: checkpoint,
+        originalIndex: index,
+      }));
+      setOptimizedCheckpoints(orderedCheckpoints);
+
+      const initialStatus = orderedCheckpoints.map(() => false);
+      setCheckpointStatus(initialStatus);
+      gameState.current.checkpointsPassed = initialStatus;
+    }
+  }, [
+    checkpoints,
+    finishPosition,
+    defaultFinishPosition,
+    actualFinishPosition,
+    initialPosition,
+  ]);
+
+  // Function to reset the race without reloading the page
+  const resetRace = () => {
+    // Reset race state
+    setRaceComplete(false);
+    setRaceTime(0);
+    setCountdown(3);
+    setRaceStarted(false);
+    setModelLoaded(false); // Reset model loaded state to trigger countdown
+
+    // Reset checkpoint status
+    const resetStatus = Array(checkpointStatus.length).fill(false);
+    setCheckpointStatus(resetStatus);
+
+    // Calculate initial heading toward first checkpoint or finish
+    let initialHeading = 0;
+    if (checkpoints && checkpoints.length > 0) {
+      // Head toward first checkpoint
+      const dx = checkpoints[0][0] - initialPosition[0];
+      const dy = checkpoints[0][1] - initialPosition[1];
+      initialHeading = Math.atan2(dx, dy);
+    } else if (actualFinishPosition) {
+      // Head toward finish position
+      const dx = actualFinishPosition[0] - initialPosition[0];
+      const dy = actualFinishPosition[1] - initialPosition[1];
+      initialHeading = Math.atan2(dx, dy);
+    }
+
+    // Reset game state
+    gameState.current.carPosition = initialPosition;
+    gameState.current.carHeading = initialHeading;
+    gameState.current.carSpeed = 0;
+    gameState.current.carVelocity = [0, 0];
+    gameState.current.forwardImpulse = 0;
+    gameState.current.backwardImpulse = 0;
+    gameState.current.steeringAngle = 0;
+    gameState.current.checkpointsPassed = resetStatus;
+    gameState.current.raceComplete = false;
+    gameState.current.raceStartTime = 0;
+    gameState.current.raceFinishTime = 0;
+    gameState.current.modelLoaded = false; // Reset model loaded state
+
+    // Reset car position on map with calculated heading
+    if (mapRef.current) {
+      mapRef.current.jumpTo({
+        center: initialPosition,
+        bearing: (initialHeading * 180) / Math.PI, // Convert to degrees
+        pitch: 55,
+      });
+    }
+
+    // Force re-initialization of the 3D model
+    setTimeout(() => {
+      setModelLoaded(true);
+      gameState.current.modelLoaded = true;
+    }, 100);
+  };
 
   // Start the countdown when model is loaded
   useEffect(() => {
@@ -98,6 +258,541 @@ export default function RaceView({ startPosition }) {
     }
   }, [isMapLoaded, modelLoaded]);
 
+  // Load and display race route
+  const fetchAndDisplayRoute = async (map) => {
+    try {
+      // Use our stored finish position for consistency
+      const finishPointToUse = actualFinishPosition;
+
+      // Build waypoints array with checkpoints in the middle
+      const waypoints = [initialPosition];
+
+      // Add all checkpoints in between in their original order
+      if (checkpoints && checkpoints.length > 0) {
+        waypoints.push(...checkpoints);
+      }
+
+      // Add finish position as the last point
+      waypoints.push(finishPointToUse);
+
+      // Also update the game state
+      gameState.current.actualFinishPosition = finishPointToUse;
+
+      // Create a direct line between waypoints (not following roads)
+      const routeGeometry = {
+        type: "LineString",
+        coordinates: waypoints,
+      };
+
+      // Store the route coordinates for boundary checking
+      setRouteCoordinates(waypoints);
+
+      // Estimate the route distance (straight-line distance between points)
+      let totalDistance = 0;
+      for (let i = 1; i < waypoints.length; i++) {
+        const dx = waypoints[i][0] - waypoints[i - 1][0];
+        const dy = waypoints[i][1] - waypoints[i - 1][1];
+        // Convert to meters (rough approximation)
+        const segmentDistance = Math.sqrt(dx * dx + dy * dy) * 111000;
+        totalDistance += segmentDistance;
+      }
+
+      // Create ordered checkpoints array with original positions
+      const orderedCheckpoints = checkpoints.map((checkpoint, index) => ({
+        position: checkpoint,
+        originalIndex: index,
+      }));
+
+      // Add the route source and layer
+      map.addSource("route", {
+        type: "geojson",
+        data: {
+          type: "Feature",
+          properties: {},
+          geometry: routeGeometry,
+        },
+      });
+
+      // Add route layer - a glowing effect with two lines
+      map.addLayer({
+        id: "route-glow",
+        type: "line",
+        source: "route",
+        layout: {
+          "line-join": "round",
+          "line-cap": "round",
+        },
+        paint: {
+          "line-color": "#4882c5",
+          "line-width": 12,
+          "line-opacity": 0.6,
+          "line-blur": 3,
+        },
+      });
+
+      map.addLayer({
+        id: "route-core",
+        type: "line",
+        source: "route",
+        layout: {
+          "line-join": "round",
+          "line-cap": "round",
+        },
+        paint: {
+          "line-color": "#2b98f0",
+          "line-width": 4,
+          "line-dasharray": [0.5, 1.5],
+          "line-opacity": 0.7,
+        },
+      });
+
+      // Debug drawing - add dots at each coordinate to verify the route
+      const debugPoints = {
+        type: "FeatureCollection",
+        features: waypoints.map((wp, index) => ({
+          type: "Feature",
+          properties: {
+            pointType:
+              index === 0
+                ? "start"
+                : index === waypoints.length - 1
+                ? "finish"
+                : "checkpoint",
+          },
+          geometry: {
+            type: "Point",
+            coordinates: wp,
+          },
+        })),
+      };
+
+      map.addSource("debug-points", {
+        type: "geojson",
+        data: debugPoints,
+      });
+
+      map.addLayer({
+        id: "debug-points-layer",
+        type: "circle",
+        source: "debug-points",
+        paint: {
+          "circle-radius": 4,
+          "circle-color": [
+            "match",
+            ["get", "pointType"],
+            "start",
+            "#00ff00",
+            "finish",
+            "#ff0000",
+            "#ffff00",
+          ],
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#ffffff",
+        },
+      });
+
+      // Add direction arrows along the path
+      const coordinates = waypoints;
+
+      // Place arrows at intervals
+      if (coordinates.length > 2) {
+        // Add arrow source using the route coordinates
+        const arrowsSource = {
+          type: "geojson",
+          data: {
+            type: "FeatureCollection",
+            features: [],
+          },
+        };
+
+        // Add arrows at each segment midpoint
+        for (let i = 0; i < coordinates.length - 1; i++) {
+          const startPoint = coordinates[i];
+          const endPoint = coordinates[i + 1];
+
+          // Midpoint of the segment
+          const midPoint = [
+            (startPoint[0] + endPoint[0]) / 2,
+            (startPoint[1] + endPoint[1]) / 2,
+          ];
+
+          // Angle from start to end point
+          const angle =
+            (Math.atan2(
+              endPoint[0] - startPoint[0],
+              endPoint[1] - startPoint[1]
+            ) *
+              180) /
+            Math.PI;
+
+          arrowsSource.data.features.push({
+            type: "Feature",
+            properties: {
+              angle: angle,
+              segmentIndex: i,
+            },
+            geometry: {
+              type: "Point",
+              coordinates: midPoint,
+            },
+          });
+        }
+
+        // Add arrows source to map
+        map.addSource("route-arrows", arrowsSource);
+
+        // Add symbol layer for arrows
+        map.addLayer({
+          id: "route-arrows-layer",
+          type: "symbol",
+          source: "route-arrows",
+          layout: {
+            "icon-image": "arrow",
+            "icon-size": 0.7,
+            "icon-rotate": ["get", "angle"],
+            "icon-rotation-alignment": "map",
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+          },
+        });
+
+        // Load arrow image
+        map.loadImage(
+          "https://docs.mapbox.com/mapbox-gl-js/assets/arrow.png",
+          (error, image) => {
+            if (error) throw error;
+            map.addImage("arrow", image);
+            map.triggerRepaint();
+          }
+        );
+      }
+
+      // Add start marker
+      const startEl = document.createElement("div");
+      startEl.className = "start-marker";
+      startEl.style.backgroundColor = "#4caf50";
+      startEl.style.width = "24px";
+      startEl.style.height = "24px";
+      startEl.style.borderRadius = "50%";
+      startEl.style.border = "3px solid white";
+      startEl.style.boxShadow = "0 0 12px rgba(76, 175, 80, 0.8)";
+      startEl.innerHTML =
+        '<div style="color:white;font-weight:bold;text-align:center;line-height:24px;">S</div>';
+
+      new mapboxgl.Marker(startEl).setLngLat(initialPosition).addTo(map);
+
+      // Add markers for checkpoints in their original order
+      if (checkpoints && checkpoints.length > 0) {
+        checkpoints.forEach((checkpoint, index) => {
+          // Create a DOM element for the marker
+          const el = document.createElement("div");
+          el.className = "checkpoint-marker";
+          el.style.backgroundColor = "#ffdd00";
+          el.style.width = "20px";
+          el.style.height = "20px";
+          el.style.borderRadius = "50%";
+          el.style.border = "3px solid #ff9900";
+          el.style.boxShadow = "0 0 10px rgba(255, 217, 0, 0.7)";
+
+          // Add checkpoint number
+          const label = document.createElement("div");
+          label.textContent = (index + 1).toString();
+          label.style.color = "#000";
+          label.style.fontWeight = "bold";
+          label.style.fontSize = "12px";
+          label.style.textAlign = "center";
+          label.style.lineHeight = "20px";
+          el.appendChild(label);
+
+          // Add marker to map
+          new mapboxgl.Marker(el).setLngLat(checkpoint).addTo(map);
+        });
+      }
+
+      // Add finish marker
+      const finishEl = document.createElement("div");
+      finishEl.className = "finish-marker";
+      finishEl.style.backgroundColor = "#ff3b3b";
+      finishEl.style.width = "24px";
+      finishEl.style.height = "24px";
+      finishEl.style.borderRadius = "50%";
+      finishEl.style.border = "3px solid white";
+      finishEl.style.boxShadow = "0 0 12px rgba(255, 59, 59, 0.8)";
+      finishEl.innerHTML =
+        '<div style="color:white;font-weight:bold;text-align:center;line-height:24px;">F</div>';
+
+      // Make sure we use the same finish position here
+      console.log("Adding finish marker at:", finishPointToUse);
+      new mapboxgl.Marker(finishEl).setLngLat(finishPointToUse).addTo(map);
+
+      setRouteLoaded(true);
+
+      // Store the route distance in the state for display
+      setDebugInfo((prev) => ({
+        ...prev,
+        routeDistance: totalDistance,
+      }));
+    } catch (error) {
+      console.error("Error creating race route:", error);
+    }
+  };
+
+  // Function to calculate distance between two points (in longitude/latitude)
+  const calculateDistance = (point1, point2) => {
+    // Simple Euclidean distance - for more precise calculations we'd use the Haversine formula
+    const dx = point1[0] - point2[0];
+    const dy = point1[1] - point2[1];
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  // Check for checkpoint and finish line crossings
+  const checkRaceProgress = () => {
+    const carPosition = gameState.current.carPosition;
+    const checkpointRadius = 0.00015; // Detection radius for checkpoints, ~15m
+
+    // Always use the finish position from game state
+    const finishPos = gameState.current.actualFinishPosition;
+
+    // Check each checkpoint
+    if (optimizedCheckpoints && optimizedCheckpoints.length > 0) {
+      let allPassed = true;
+
+      const newStatus = [...gameState.current.checkpointsPassed];
+      optimizedCheckpoints.forEach((checkpoint, index) => {
+        // Check if car is within range of checkpoint
+        // Make sure checkpoint has a position property before using it
+        const checkpointPosition = checkpoint.position || checkpoint;
+        const distance = calculateDistance(carPosition, checkpointPosition);
+
+        if (distance < checkpointRadius && !newStatus[index]) {
+          // Checkpoint passed!
+          newStatus[index] = true;
+
+          // Create a flash effect on screen
+          const flash = document.createElement("div");
+          flash.className = "checkpoint-flash";
+          flash.style.position = "absolute";
+          flash.style.inset = "0";
+          flash.style.backgroundColor = "rgba(255, 255, 0, 0.3)";
+          flash.style.zIndex = "1000";
+          flash.style.pointerEvents = "none";
+          flash.style.animation = "flash 0.5s ease-out";
+          document.body.appendChild(flash);
+
+          // Remove flash after animation
+          setTimeout(() => {
+            document.body.removeChild(flash);
+          }, 500);
+        }
+
+        if (!newStatus[index]) allPassed = false;
+      });
+
+      gameState.current.checkpointsPassed = newStatus;
+      setCheckpointStatus(newStatus);
+
+      // Only check finish line if all checkpoints have been passed
+      if (allPassed && !gameState.current.raceComplete) {
+        const finishDistance = calculateDistance(carPosition, finishPos);
+
+        if (finishDistance < checkpointRadius) {
+          // Race complete!
+          gameState.current.raceComplete = true;
+          gameState.current.raceFinishTime = performance.now();
+          const totalTime =
+            (gameState.current.raceFinishTime -
+              gameState.current.raceStartTime) /
+            1000;
+          setRaceTime(totalTime);
+          setRaceComplete(true);
+
+          // Create a finish flash effect
+          const flash = document.createElement("div");
+          flash.className = "finish-flash";
+          flash.style.position = "absolute";
+          flash.style.inset = "0";
+          flash.style.backgroundColor = "rgba(0, 255, 0, 0.3)";
+          flash.style.zIndex = "1000";
+          flash.style.pointerEvents = "none";
+          flash.style.animation = "flash 1s ease-out";
+          document.body.appendChild(flash);
+
+          // Remove flash after animation
+          setTimeout(() => {
+            document.body.removeChild(flash);
+          }, 1000);
+        }
+      }
+    } else if (checkpoints && checkpoints.length > 0) {
+      // Fallback to original checkpoints if optimizedCheckpoints not ready
+      let allPassed = true;
+
+      const newStatus = [
+        ...(gameState.current.checkpointsPassed ||
+          Array(checkpoints.length).fill(false)),
+      ];
+      checkpoints.forEach((checkpoint, index) => {
+        // Check if car is within range of checkpoint
+        const distance = calculateDistance(carPosition, checkpoint);
+
+        if (distance < checkpointRadius && !newStatus[index]) {
+          // Checkpoint passed!
+          newStatus[index] = true;
+
+          // Create a flash effect on screen
+          const flash = document.createElement("div");
+          flash.className = "checkpoint-flash";
+          flash.style.position = "absolute";
+          flash.style.inset = "0";
+          flash.style.backgroundColor = "rgba(255, 255, 0, 0.3)";
+          flash.style.zIndex = "1000";
+          flash.style.pointerEvents = "none";
+          flash.style.animation = "flash 0.5s ease-out";
+          document.body.appendChild(flash);
+
+          // Remove flash after animation
+          setTimeout(() => {
+            document.body.removeChild(flash);
+          }, 500);
+        }
+
+        if (!newStatus[index]) allPassed = false;
+      });
+
+      gameState.current.checkpointsPassed = newStatus;
+      setCheckpointStatus(newStatus);
+
+      // Check finish line only if all checkpoints passed
+      if (allPassed && !gameState.current.raceComplete) {
+        const finishDistance = calculateDistance(carPosition, finishPos);
+        if (finishDistance < checkpointRadius) {
+          // Race complete!
+          gameState.current.raceComplete = true;
+          gameState.current.raceFinishTime = performance.now();
+          const totalTime =
+            (gameState.current.raceFinishTime -
+              gameState.current.raceStartTime) /
+            1000;
+          setRaceTime(totalTime);
+          setRaceComplete(true);
+
+          // Create a finish flash effect
+          const flash = document.createElement("div");
+          flash.className = "finish-flash";
+          flash.style.position = "absolute";
+          flash.style.inset = "0";
+          flash.style.backgroundColor = "rgba(0, 255, 0, 0.3)";
+          flash.style.zIndex = "1000";
+          flash.style.pointerEvents = "none";
+          flash.style.animation = "flash 1s ease-out";
+          document.body.appendChild(flash);
+
+          // Remove flash after animation
+          setTimeout(() => {
+            document.body.removeChild(flash);
+          }, 1000);
+        }
+      }
+    } else {
+      // No checkpoints, just check finish line
+      const finishDistance = calculateDistance(carPosition, finishPos);
+
+      if (
+        finishDistance < checkpointRadius &&
+        !gameState.current.raceComplete
+      ) {
+        // Race complete!
+        gameState.current.raceComplete = true;
+        gameState.current.raceFinishTime = performance.now();
+        const totalTime =
+          (gameState.current.raceFinishTime - gameState.current.raceStartTime) /
+          1000;
+        setRaceTime(totalTime);
+        setRaceComplete(true);
+
+        // Create a finish flash effect
+        const flash = document.createElement("div");
+        flash.className = "finish-flash";
+        flash.style.position = "absolute";
+        flash.style.inset = "0";
+        flash.style.backgroundColor = "rgba(0, 255, 0, 0.3)";
+        flash.style.zIndex = "1000";
+        flash.style.pointerEvents = "none";
+        flash.style.animation = "flash 1s ease-out";
+        document.body.appendChild(flash);
+
+        // Remove flash after animation
+        setTimeout(() => {
+          document.body.removeChild(flash);
+        }, 1000);
+      }
+    }
+  };
+
+  // Function to check if car is on the route
+  const isCarOnRoute = (carPosition, routeCoords) => {
+    if (!routeCoords || routeCoords.length < 2) return true;
+
+    // For direct line segments, we need to find the closest line segment
+    let minDistance = Infinity;
+
+    // Check each segment of the route
+    for (let i = 0; i < routeCoords.length - 1; i++) {
+      const start = routeCoords[i];
+      const end = routeCoords[i + 1];
+
+      // Calculate the distance from the car to this line segment
+      const distance = distanceToLineSegment(
+        carPosition[0],
+        carPosition[1],
+        start[0],
+        start[1],
+        end[0],
+        end[1]
+      );
+
+      minDistance = Math.min(minDistance, distance);
+    }
+
+    // Define max allowed distance from route (adjust as needed)
+    // This is the width of the invisible wall corridor
+    const maxDistanceFromRoute = 0.0003; // ~30-40 meters depending on latitude - much wider corridor
+
+    return minDistance <= maxDistanceFromRoute;
+  };
+
+  // Helper function to calculate distance from a point to a line segment
+  const distanceToLineSegment = (px, py, x1, y1, x2, y2) => {
+    const A = px - x1;
+    const B = py - y1;
+    const C = x2 - x1;
+    const D = y2 - y1;
+
+    const dot = A * C + B * D;
+    const lenSq = C * C + D * D;
+    let param = -1;
+
+    if (lenSq !== 0) param = dot / lenSq;
+
+    let xx, yy;
+
+    if (param < 0) {
+      xx = x1;
+      yy = y1;
+    } else if (param > 1) {
+      xx = x2;
+      yy = y2;
+    } else {
+      xx = x1 + param * C;
+      yy = y1 + param * D;
+    }
+
+    const dx = px - xx;
+    const dy = py - yy;
+
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
   useEffect(() => {
     // Initialize map
     const map = new mapboxgl.Map({
@@ -106,7 +801,7 @@ export default function RaceView({ startPosition }) {
       center: gameState.current.carPosition,
       zoom: 21,
       pitch: 55,
-      bearing: 0,
+      bearing: (gameState.current.carHeading * 180) / Math.PI, // Use car's heading in degrees
       antialias: true,
       config: {
         basemap: {
@@ -146,18 +841,21 @@ export default function RaceView({ startPosition }) {
         });
       }
 
-      map.setRain({
-        density: 0.5,
-        intensity: 1.0,
-        color: "#a8adbc",
-        opacity: 0.7,
-        vignette: 1,
-        "vignette-color": "#464646",
-        direction: [0, 80],
-        "droplet-size": [2.6, 18.2],
-        "distortion-strength": 0.7,
-        "center-thinning": 0, // Rain to be displayed on the whole screen area
-      });
+      //   map.setRain({
+      //     density: 0.5,
+      //     intensity: 1.0,
+      //     color: "#a8adbc",
+      //     opacity: 0.7,
+      //     vignette: 1,
+      //     "vignette-color": "#464646",
+      //     direction: [0, 80],
+      //     "droplet-size": [2.6, 18.2],
+      //     "distortion-strength": 0.7,
+      //     "center-thinning": 0, // Rain to be displayed on the whole screen area
+      //   });
+
+      // Fetch and display the race route
+      fetchAndDisplayRoute(map);
 
       // Add custom layer for car
       map.addLayer({
@@ -200,7 +898,6 @@ export default function RaceView({ startPosition }) {
               this.scene.add(this.carModel);
               gameState.current.modelLoaded = true;
               setModelLoaded(true);
-              console.log("Model loaded successfully");
             },
             undefined,
             (error) => {
@@ -350,7 +1047,7 @@ export default function RaceView({ startPosition }) {
     });
 
     return () => map.remove();
-  }, [initialPosition]);
+  }, [initialPosition, defaultFinishPosition, checkpoints]);
 
   // Keyboard input
   useEffect(() => {
@@ -396,6 +1093,11 @@ export default function RaceView({ startPosition }) {
       }
     };
 
+    // Clean up any existing keyboard listeners first
+    window.removeEventListener("keydown", handleKeyDown);
+    window.removeEventListener("keyup", handleKeyUp);
+
+    // Add the new listeners
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
 
@@ -405,50 +1107,20 @@ export default function RaceView({ startPosition }) {
     };
   }, [raceStarted]);
 
-  // A simple collision check (unchanged)
-  const checkCollision = (position) => {
-    if (!mapRef.current) return false;
-    const map = mapRef.current;
-    const [lng, lat] = position;
-    const delta = 0.00001;
-    const features = map.queryRenderedFeatures(
-      [
-        map.project([lng - delta, lat - delta]),
-        map.project([lng + delta, lat + delta]),
-      ],
-      { layers: ["3d-buildings"] }
-    );
-
-    for (const feature of features) {
-      if (feature.geometry.type === "Polygon") {
-        const coords = feature.geometry.coordinates[0];
-        let minLng = 180,
-          maxLng = -180,
-          minLat = 90,
-          maxLat = -90;
-
-        for (const [ptLng, ptLat] of coords) {
-          minLng = Math.min(minLng, ptLng);
-          maxLng = Math.max(maxLng, ptLng);
-          minLat = Math.min(minLat, ptLat);
-          maxLat = Math.max(maxLat, ptLat);
-        }
-        if (lng >= minLng && lng <= maxLng && lat >= minLat && lat <= maxLat) {
-          return true;
-        }
-      }
-    }
-    return false;
-  };
-
-  // Game loop (movement, collisions, etc.)
+  // Game loop (movement, etc.)
   useEffect(() => {
     if (!isMapLoaded || !raceStarted) return;
+
+    // Start the race timer
+    if (gameState.current.raceStartTime === 0) {
+      gameState.current.raceStartTime = performance.now();
+    }
 
     let animationId;
 
     const gameLoop = (timestamp) => {
       const state = gameState.current;
+
       const deltaTime = state.lastFrame ? timestamp - state.lastFrame : 16.67;
       state.lastFrame = timestamp;
       const dt = Math.min(deltaTime, 100) / 1000;
@@ -487,6 +1159,8 @@ export default function RaceView({ startPosition }) {
 
       if (state.forwardImpulse < 0.01) state.forwardImpulse = 0;
       if (state.backwardImpulse < 0.01) state.backwardImpulse = 0;
+
+      // Make a copy of the controls to compare in next frame
       state.prevControls = { ...state.controls };
 
       // Steering
@@ -579,7 +1253,6 @@ export default function RaceView({ startPosition }) {
       }
 
       // Update position
-      const oldPos = [...state.carPosition];
       if (Math.abs(state.carSpeed) > 1e-9) {
         const vx = state.carSpeed * Math.sin(state.carHeading);
         const vy = state.carSpeed * Math.cos(state.carHeading);
@@ -594,18 +1267,37 @@ export default function RaceView({ startPosition }) {
           ];
         }
 
-        const newPos = [
+        const tentativeNewPos = [
           state.carPosition[0] + state.carVelocity[0],
           state.carPosition[1] + state.carVelocity[1],
         ];
 
-        if (checkCollision(newPos)) {
-          state.carPosition = oldPos;
-          state.carVelocity[0] = -state.carVelocity[0] * 0.3;
-          state.carVelocity[1] = -state.carVelocity[1] * 0.3;
-          state.carSpeed *= 0.3;
+        // Re-enable the wall check with our improved distance calculation
+        if (
+          routeCoordinates &&
+          routeCoordinates.length > 0 &&
+          !isCarOnRoute(tentativeNewPos, routeCoordinates)
+        ) {
+          // Car is trying to go off-route - prevent it
+          // Reduce speed significantly
+          state.carSpeed *= 0.2;
+
+          // Show warning if not already showing
+          if (!offTrackWarning) {
+            setOffTrackWarning(true);
+            setTimeout(() => setOffTrackWarning(false), 1000);
+          }
+
+          // Keep car at current position with minimal movement
+          // This creates a "sliding along wall" effect
+          const bounceBackFactor = 0.02;
+          state.carPosition = [
+            state.carPosition[0] + state.carVelocity[0] * bounceBackFactor,
+            state.carPosition[1] + state.carVelocity[1] * bounceBackFactor,
+          ];
         } else {
-          state.carPosition = newPos;
+          // Car is on route or no route loaded yet, proceed with normal movement
+          state.carPosition = tentativeNewPos;
         }
       }
 
@@ -630,15 +1322,31 @@ export default function RaceView({ startPosition }) {
         }));
       }
 
+      // Update race time if race is ongoing
+      if (!state.raceComplete) {
+        const currentRaceTime =
+          (performance.now() - state.raceStartTime) / 1000;
+        if (timestamp % 100 < 16) {
+          // Update UI ~10 times/sec
+          setRaceTime(currentRaceTime);
+        }
+      }
+
+      // Check race progress
+      checkRaceProgress();
+
       animationId = requestAnimationFrame(gameLoop);
     };
 
     animationId = requestAnimationFrame(gameLoop);
     return () => cancelAnimationFrame(animationId);
-  }, [isMapLoaded, raceStarted]);
+  }, [isMapLoaded, raceStarted, routeCoordinates, offTrackWarning]);
 
   return (
     <div className="w-full h-full relative">
+      {/* Add animation style to head */}
+      <style>{flashAnimationStyle}</style>
+
       <div ref={mapContainerRef} className="w-full h-full" />
 
       {/* Loading overlay */}
@@ -657,6 +1365,97 @@ export default function RaceView({ startPosition }) {
             {countdown}
           </div>
           <div className="mt-8 text-gray-300 text-lg">Get ready!</div>
+        </div>
+      )}
+
+      {/* Race timer UI */}
+      {raceStarted && !raceComplete && (
+        <div className="absolute top-4 right-4 bg-black bg-opacity-60 text-white p-3 rounded-lg">
+          <div className="text-xl font-bold">{raceTime.toFixed(2)}s</div>
+
+          {/* Route distance */}
+          {debugInfo.routeDistance && (
+            <div className="text-xs text-gray-300 mt-1">
+              Race distance: {(debugInfo.routeDistance / 1000).toFixed(2)} km
+            </div>
+          )}
+
+          {/* Checkpoint progress indicator */}
+          {checkpoints && checkpoints.length > 0 && (
+            <div className="mt-2">
+              <div className="text-xs mb-1">Checkpoints:</div>
+              <div className="flex gap-2">
+                {checkpointStatus.map((passed, index) => (
+                  <div
+                    key={index}
+                    className={`w-4 h-4 rounded-full ${
+                      passed ? "bg-green-500" : "bg-gray-500"
+                    }`}
+                    title={`Checkpoint ${index + 1}`}
+                  ></div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Next checkpoint guidance */}
+      {raceStarted &&
+        !raceComplete &&
+        optimizedCheckpoints &&
+        optimizedCheckpoints.length > 0 && (
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-60 text-white px-4 py-2 rounded-lg">
+            {checkpointStatus.every((status) => status) ? (
+              <div className="text-center">
+                <div className="text-sm text-yellow-400 font-medium">
+                  FINAL TARGET
+                </div>
+                <div className="text-xs">Head to the finish line!</div>
+              </div>
+            ) : (
+              <div className="text-center">
+                {checkpointStatus.findIndex((status) => !status) !== -1 && (
+                  <>
+                    <div className="text-sm text-yellow-400 font-medium">
+                      CHECKPOINT{" "}
+                      {checkpointStatus.findIndex((status) => !status) + 1}
+                    </div>
+                    <div className="text-xs">Follow the blue line</div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+      {/* Race complete overlay */}
+      {raceComplete && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-60">
+          <div className="bg-black bg-opacity-80 p-8 rounded-xl flex flex-col items-center">
+            <div className="text-green-500 text-4xl mb-4 font-bold">
+              FINISH!
+            </div>
+            <div className="text-white text-6xl font-bold mb-6">
+              {raceTime.toFixed(2)}s
+            </div>
+            <button
+              className="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md transition"
+              onClick={resetRace}
+            >
+              Race Again
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Off-track warning */}
+      {offTrackWarning && (
+        <div
+          className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 
+                      bg-red-600 bg-opacity-60 text-white px-6 py-3 rounded-lg text-xl font-bold"
+        >
+          Stay on the track!
         </div>
       )}
 
