@@ -1,5 +1,5 @@
+use redis::Client as RedisClient;
 use sea_orm::{Database, DatabaseConnection, DbErr};
-use redis::{Client as RedisClient, AsyncCommands};
 
 use crate::config::Config;
 
@@ -23,6 +23,6 @@ pub fn init_redis(config: &Config) -> Result<RedisClient, redis::RedisError> {
 pub async fn init_state(config: &Config) -> anyhow::Result<AppState> {
     let conn = init_database(config).await?;
     let redis = init_redis(config)?;
-    
+
     Ok(AppState { conn, redis })
-} 
+}

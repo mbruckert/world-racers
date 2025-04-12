@@ -1,15 +1,14 @@
-use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
-use std::ops::ControlFlow;
+use std::sync::{Arc, Mutex};
 
 use axum::{
+    Router,
     extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
         State,
+        ws::{Message, WebSocket, WebSocketUpgrade},
     },
     response::IntoResponse,
     routing::get,
-    Router,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
 use tokio::sync::broadcast;
@@ -21,10 +20,7 @@ type UserId = String;
 type UserSessions = Arc<Mutex<HashMap<UserId, broadcast::Sender<String>>>>;
 
 #[axum::debug_handler]
-async fn ws_handler(
-    ws: WebSocketUpgrade,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(|socket| handle_socket(socket, state))
 }
 
@@ -48,4 +44,4 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
 
 pub fn router() -> Router<AppState> {
     Router::new().route("/ws", get(ws_handler))
-} 
+}
