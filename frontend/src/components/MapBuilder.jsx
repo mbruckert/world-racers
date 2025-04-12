@@ -179,6 +179,12 @@ export default function MapBuilder({ onRouteSubmit }) {
             type="text"
             value={address}
             onChange={handleAddressChange}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleGeocode();
+              }
+            }}
             placeholder="Search for a location"
             className="flex-1 outline-none bg-transparent text-gray-600 placeholder:text-gray-400"
           />

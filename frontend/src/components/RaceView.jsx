@@ -25,6 +25,7 @@ export default function RaceView({
   const mapRef = useRef(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [modelLoaded, setModelLoaded] = useState(false);
+  const [secondCarModelLoaded, setSecondCarModelLoaded] = useState(false);
   const [countdown, setCountdown] = useState(3);
   const [raceStarted, setRaceStarted] = useState(false);
   const [routeLoaded, setRouteLoaded] = useState(false);
@@ -57,6 +58,11 @@ export default function RaceView({
     return finishPosition || defaultFinishPosition;
   }, [finishPosition, defaultFinishPosition]);
 
+  // Second car initial offset - slightly to the right of the primary car
+  const secondCarInitialOffset = useMemo(() => {
+    return [0.00005, 0.00002]; // Offset in [lng, lat]
+  }, []);
+
   // Game state
   const gameState = useRef({
     // Position & motion
@@ -64,6 +70,16 @@ export default function RaceView({
     carHeading: 0, // radians, 0 is north
     carSpeed: 0,
     carVelocity: [0, 0],
+
+    // Second car
+    secondCarPosition: [
+      initialPosition[0] + secondCarInitialOffset[0],
+      initialPosition[1] + secondCarInitialOffset[1],
+    ],
+    secondCarHeading: 0, // radians, 0 is north
+    secondCarSpeed: 0,
+    secondCarVelocity: [0, 0],
+    secondCarDistance: 0.00008, // Target distance to maintain from primary car
 
     // Key-based impulses
     forwardImpulse: 0,
@@ -107,6 +123,7 @@ export default function RaceView({
 
     // Model info
     modelLoaded: false,
+    secondCarModelLoaded: false,
 
     // Race progress tracking
     checkpointsPassed: [],
@@ -191,6 +208,7 @@ export default function RaceView({
     setCountdown(3);
     setRaceStarted(false);
     setModelLoaded(false); // Reset model loaded state to trigger countdown
+    setSecondCarModelLoaded(false); // Reset second car model loaded state
 
     // Reset checkpoint status
     const resetStatus = Array(checkpointStatus.length).fill(false);
@@ -215,6 +233,16 @@ export default function RaceView({
     gameState.current.carHeading = initialHeading;
     gameState.current.carSpeed = 0;
     gameState.current.carVelocity = [0, 0];
+
+    // Reset second car
+    gameState.current.secondCarPosition = [
+      initialPosition[0] + secondCarInitialOffset[0],
+      initialPosition[1] + secondCarInitialOffset[1],
+    ];
+    gameState.current.secondCarHeading = initialHeading;
+    gameState.current.secondCarSpeed = 0;
+    gameState.current.secondCarVelocity = [0, 0];
+
     gameState.current.forwardImpulse = 0;
     gameState.current.backwardImpulse = 0;
     gameState.current.steeringAngle = 0;
@@ -223,6 +251,7 @@ export default function RaceView({
     gameState.current.raceStartTime = 0;
     gameState.current.raceFinishTime = 0;
     gameState.current.modelLoaded = false; // Reset model loaded state
+    gameState.current.secondCarModelLoaded = false; // Reset second car model loaded state
 
     // Reset car position on map with calculated heading
     if (mapRef.current) {
@@ -233,16 +262,18 @@ export default function RaceView({
       });
     }
 
-    // Force re-initialization of the 3D model
+    // Force re-initialization of the 3D models
     setTimeout(() => {
       setModelLoaded(true);
       gameState.current.modelLoaded = true;
+      setSecondCarModelLoaded(true);
+      gameState.current.secondCarModelLoaded = true;
     }, 100);
   };
 
-  // Start the countdown when model is loaded
+  // Start the countdown when both models are loaded
   useEffect(() => {
-    if (isMapLoaded && modelLoaded) {
+    if (isMapLoaded && modelLoaded && secondCarModelLoaded) {
       const timer = setInterval(() => {
         setCountdown((prev) => {
           if (prev <= 1) {
@@ -256,7 +287,7 @@ export default function RaceView({
 
       return () => clearInterval(timer);
     }
-  }, [isMapLoaded, modelLoaded]);
+  }, [isMapLoaded, modelLoaded, secondCarModelLoaded]);
 
   // Load and display race route
   const fetchAndDisplayRoute = async (map) => {
@@ -879,7 +910,7 @@ export default function RaceView({
           dirLight2.position.set(0, 5, 5).normalize();
           this.scene.add(dirLight2);
 
-          // Load car model
+          // Load primary car model
           const loader = new GLTFLoader();
           loader.load(
             "./models/low_poly_nissan_gtr.glb",
@@ -905,6 +936,48 @@ export default function RaceView({
             }
           );
 
+          // Load second car model
+          loader.load(
+            "./models/low_poly_nissan_gtr.glb", // Using the same model, could be different
+            (gltf) => {
+              this.secondCarModel = gltf.scene.clone();
+              this.secondCarModel.scale.set(1, 1, 1);
+
+              // Center the model
+              const box = new THREE.Box3().setFromObject(this.secondCarModel);
+              const center = box.getCenter(new THREE.Vector3());
+              this.secondCarModel.position.sub(center);
+
+              // Raise it slightly
+              this.secondCarModel.position.y += 2;
+
+              // Make the second car a different color
+              this.secondCarModel.traverse((child) => {
+                if (child.isMesh && child.material) {
+                  if (Array.isArray(child.material)) {
+                    child.material = child.material.map((mat) => {
+                      const newMat = mat.clone();
+                      newMat.color.set(0x3366ff); // Blue color
+                      return newMat;
+                    });
+                  } else {
+                    const newMat = child.material.clone();
+                    newMat.color.set(0x3366ff); // Blue color
+                    child.material = newMat;
+                  }
+                }
+              });
+
+              this.scene.add(this.secondCarModel);
+              gameState.current.secondCarModelLoaded = true;
+              setSecondCarModelLoaded(true);
+            },
+            undefined,
+            (error) => {
+              console.error("Error loading second car model:", error);
+            }
+          );
+
           // Renderer
           this.renderer = new THREE.WebGLRenderer({
             canvas: map.getCanvas(),
@@ -915,12 +988,20 @@ export default function RaceView({
         },
 
         render: function (gl, matrix) {
+          // Skip rendering if primary car model isn't loaded
           if (!this.carModel) return;
 
-          const { carPosition, carHeading } = gameState.current;
+          const {
+            carPosition,
+            carHeading,
+            secondCarPosition,
+            secondCarHeading,
+          } = gameState.current;
+
+          // Primary car elevation
           const elevation = map.queryTerrainElevation(carPosition) || 0;
 
-          // ====== TERRAIN TILT LOGIC ======
+          // ====== TERRAIN TILT LOGIC - PRIMARY CAR ======
           // We'll sample 4 points: front, back, left, right
           // relative to the car's heading, to approximate the slope.
 
@@ -972,7 +1053,7 @@ export default function RaceView({
           const rollSlope = (elevRight - elevLeft) / (2 * distMeters);
           const rollAngle = Math.atan(rollSlope);
 
-          // ====== BUILD MODEL MATRIX ======
+          // ====== BUILD PRIMARY CAR MODEL MATRIX ======
           // 1) Translate to (x, y, z) in Mercator
           // 2) Scale
           // 3) Rotate so car points the correct heading
@@ -1036,9 +1117,95 @@ export default function RaceView({
           const projectionMatrix = new THREE.Matrix4().fromArray(matrix);
           this.camera.projectionMatrix = projectionMatrix.multiply(modelMatrix);
 
-          // Render
+          // Render the primary car
           this.renderer.resetState();
           this.renderer.render(this.scene, this.camera);
+
+          // ====== SECOND CAR RENDERING ======
+          // Only render if the second car model is loaded
+          if (this.secondCarModel) {
+            // Get second car elevation
+            const secondCarElevation =
+              map.queryTerrainElevation(secondCarPosition) || 0;
+
+            // Calculate terrain tilt for second car (same process as for primary car)
+            const sinH2 = Math.sin(secondCarHeading);
+            const cosH2 = Math.cos(secondCarHeading);
+
+            // Forward/Back coords for second car
+            const frontCoord2 = [
+              secondCarPosition[0] + sampleDistDeg * sinH2,
+              secondCarPosition[1] + sampleDistDeg * cosH2,
+            ];
+            const backCoord2 = [
+              secondCarPosition[0] - sampleDistDeg * sinH2,
+              secondCarPosition[1] - sampleDistDeg * cosH2,
+            ];
+
+            // Right/Left coords for second car
+            const rightCoord2 = [
+              secondCarPosition[0] + sampleDistDeg * cosH2,
+              secondCarPosition[1] - sampleDistDeg * sinH2,
+            ];
+            const leftCoord2 = [
+              secondCarPosition[0] - sampleDistDeg * cosH2,
+              secondCarPosition[1] + sampleDistDeg * sinH2,
+            ];
+
+            // Sample elevation at points around second car
+            const elevFront2 = map.queryTerrainElevation(frontCoord2) || 0;
+            const elevBack2 = map.queryTerrainElevation(backCoord2) || 0;
+            const elevLeft2 = map.queryTerrainElevation(leftCoord2) || 0;
+            const elevRight2 = map.queryTerrainElevation(rightCoord2) || 0;
+
+            // Calculate pitch and roll for second car
+            const pitchSlope2 = (elevFront2 - elevBack2) / (2 * distMeters);
+            const pitchAngle2 = Math.atan(pitchSlope2);
+
+            const rollSlope2 = (elevRight2 - elevLeft2) / (2 * distMeters);
+            const rollAngle2 = Math.atan(rollSlope2);
+
+            // Build the model matrix for the second car
+            const merc2 = mapboxgl.MercatorCoordinate.fromLngLat(
+              secondCarPosition,
+              secondCarElevation
+            );
+
+            const translateMatrix2 = new THREE.Matrix4().makeTranslation(
+              merc2.x,
+              merc2.y,
+              merc2.z
+            );
+
+            const headingMatrix2 = new THREE.Matrix4().makeRotationZ(
+              secondCarHeading
+            );
+            const pitchMatrix2 = new THREE.Matrix4().makeRotationX(pitchAngle2);
+            const rollMatrix2 = new THREE.Matrix4().makeRotationY(rollAngle2);
+
+            let modelMatrix2 = new THREE.Matrix4();
+            modelMatrix2
+              .multiply(translateMatrix2)
+              .multiply(scaleMatrix) // Reuse the scale from primary car
+              .multiply(headingMatrix2)
+              .multiply(pitchMatrix2)
+              .multiply(rollMatrix2)
+              .multiply(rotationXupright);
+
+            // Update the second car's position
+            this.secondCarModel.position.copy(this.carModel.position.clone());
+            this.secondCarModel.rotation.copy(this.carModel.rotation.clone());
+
+            // Apply the second car's model matrix to the camera
+            const projectionMatrix2 = new THREE.Matrix4().fromArray(matrix);
+            this.camera.projectionMatrix =
+              projectionMatrix2.multiply(modelMatrix2);
+
+            // Render the second car
+            this.renderer.resetState();
+            this.renderer.render(this.scene, this.camera);
+          }
+
           map.triggerRepaint();
         },
       });
@@ -1298,6 +1465,100 @@ export default function RaceView({
         } else {
           // Car is on route or no route loaded yet, proceed with normal movement
           state.carPosition = tentativeNewPos;
+        }
+      }
+
+      // ===== SECOND CAR AI LOGIC =====
+      // Calculate the vector from second car to primary car
+      const dx = state.carPosition[0] - state.secondCarPosition[0];
+      const dy = state.carPosition[1] - state.secondCarPosition[1];
+
+      // Distance between cars
+      const distanceBetweenCars = Math.sqrt(dx * dx + dy * dy);
+
+      // Target direction toward primary car
+      const targetHeading = Math.atan2(dx, dy);
+
+      // Gradually adjust second car heading toward target
+      const headingDiff =
+        ((targetHeading - state.secondCarHeading + Math.PI * 3) %
+          (Math.PI * 2)) -
+        Math.PI;
+      state.secondCarHeading += headingDiff * 2.5 * dt; // Steering factor, higher = more responsive
+
+      // Normalize heading
+      state.secondCarHeading %= 2 * Math.PI;
+      if (state.secondCarHeading < 0) state.secondCarHeading += 2 * Math.PI;
+
+      // Calculate target speed based on distance to primary car
+      let targetSpeed;
+
+      // If too close, slow down or back up
+      const minDistance = state.secondCarDistance * 0.7;
+      const idealDistance = state.secondCarDistance;
+      const maxDistance = state.secondCarDistance * 1.5;
+
+      if (distanceBetweenCars < minDistance) {
+        // Too close, back up slightly
+        targetSpeed = -state.maxSpeed * 0.3;
+      } else if (distanceBetweenCars > maxDistance) {
+        // Too far, speed up to catch up
+        targetSpeed = state.maxSpeed * 1.1; // Slightly faster to catch up
+      } else if (distanceBetweenCars > idealDistance) {
+        // Slightly too far, adjust speed proportionally
+        const speedFactor = Math.min(
+          1.0,
+          (distanceBetweenCars - idealDistance) / (maxDistance - idealDistance)
+        );
+        targetSpeed = state.carSpeed * (1 + speedFactor * 0.2);
+      } else {
+        // Within acceptable range, match primary car's speed
+        targetSpeed = state.carSpeed * 0.95; // Slightly slower to maintain distance
+      }
+
+      // Gradually adjust second car speed
+      state.secondCarSpeed =
+        state.secondCarSpeed + (targetSpeed - state.secondCarSpeed) * 2 * dt;
+
+      // Ensure speed is within limits
+      if (state.secondCarSpeed > state.maxSpeed * 1.1) {
+        state.secondCarSpeed = state.maxSpeed * 1.1;
+      } else if (state.secondCarSpeed < -state.maxSpeed / 2) {
+        state.secondCarSpeed = -state.maxSpeed / 2;
+      }
+
+      // Update second car position
+      if (Math.abs(state.secondCarSpeed) > 1e-9) {
+        const vx2 = state.secondCarSpeed * Math.sin(state.secondCarHeading);
+        const vy2 = state.secondCarSpeed * Math.cos(state.secondCarHeading);
+
+        state.secondCarVelocity = [vx2, vy2];
+
+        const tentativeNewPos2 = [
+          state.secondCarPosition[0] + state.secondCarVelocity[0],
+          state.secondCarPosition[1] + state.secondCarVelocity[1],
+        ];
+
+        // Check if second car would go off route
+        if (
+          routeCoordinates &&
+          routeCoordinates.length > 0 &&
+          !isCarOnRoute(tentativeNewPos2, routeCoordinates)
+        ) {
+          // Second car is trying to go off-route - reduce speed
+          state.secondCarSpeed *= 0.2;
+
+          // Minimal movement with bounce-back effect
+          const bounceBackFactor = 0.02;
+          state.secondCarPosition = [
+            state.secondCarPosition[0] +
+              state.secondCarVelocity[0] * bounceBackFactor,
+            state.secondCarPosition[1] +
+              state.secondCarVelocity[1] * bounceBackFactor,
+          ];
+        } else {
+          // Second car is on route, proceed with normal movement
+          state.secondCarPosition = tentativeNewPos2;
         }
       }
 
