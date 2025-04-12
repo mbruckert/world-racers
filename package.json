@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "cannon-es": "^0.20.0",
+    "nanoid": "^5.1.5",
+    "three": "^0.175.0"
+  }
+}
