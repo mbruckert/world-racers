@@ -18,6 +18,25 @@ export default function MapBuilder({ onRouteSubmit }) {
   const endMarker = useRef(null);
   const checkpointMarkers = useRef([]);
 
+  // Calculate distance between two coordinates in miles using Haversine formula
+  const calculateDistance = (coord1, coord2) => {
+    const toRadians = (degrees) => degrees * (Math.PI / 180);
+
+    const R = 3958.8; // Earth's radius in miles
+    const dLat = toRadians(coord2[1] - coord1[1]);
+    const dLon = toRadians(coord2[0] - coord1[0]);
+
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRadians(coord1[1])) *
+        Math.cos(toRadians(coord2[1])) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
   useEffect(() => {
     const map = new mapboxgl.Map({
       container: "map",
@@ -107,7 +126,28 @@ export default function MapBuilder({ onRouteSubmit }) {
       return;
     }
 
-    onRouteSubmit(start, end, checkpoints);
+    // Check if distance exceeds 2 miles
+    const distance = calculateDistance(start, end);
+    if (distance > 2) {
+      setError(
+        `Distance between start and end points (${distance.toFixed(
+          2
+        )} miles) exceeds the 2 mile limit.`
+      );
+      return;
+    }
+
+    console.log("Submitting race route with:");
+    console.log("Start:", start);
+    console.log("Finish:", end);
+    console.log("Checkpoints:", checkpoints);
+
+    // Pass the positions with explicit named parameters
+    onRouteSubmit({
+      startPosition: start,
+      finishPosition: end,
+      checkpoints: checkpoints,
+    });
   };
 
   return (
