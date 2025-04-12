@@ -1,0 +1,29 @@
+[package]
+name = "api"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+migration = { path = "../migration" }
+axum = { version = "0.8", features = ["ws", "macros"] }
+tokio = { version = "1", features = ["full"] }
+sea-orm = { version = "1.1.8", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros"] }
+tower = "0.5.2"
+tower-http = { version = "0.6.2", features = ["trace", "cors"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+dotenv = "0.15"
+entity = { path = "../entity" }
+thiserror = "2.0"
+anyhow = "1.0"
+redis = { version = "0.29.5", features = ["tokio-comp"] }
+futures = "0.3"
+ctrlc = { version = "3.4", features = ["termination"] }
+rand = { version = "0.9.0", features = ["std_rng"] }
+rand_core = "0.9.3"
+rand-distributions = "0.1.2"
+utoipa = { version = "5.3.1", features = ["axum_extras", "chrono", "decimal_float"] }
+utoipa-swagger-ui = { version = "9.0.1", features = ["axum"] }
+chrono = { version = "0.4.40", features = ["serde"] }
