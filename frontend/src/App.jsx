@@ -8,6 +8,7 @@ function App() {
   const [startPosition, setStartPosition] = useState(null);
   const [endPosition, setEndPosition] = useState(null);
   const [checkpoints, setCheckpoints] = useState([]);
+  const [locationName, setLocationName] = useState("");
   const [flowState, setFlowState] = useState("building"); // building, preview, racing
   const [error, setError] = useState("");
 
@@ -22,6 +23,7 @@ function App() {
       startPosition: start,
       finishPosition: end,
       checkpoints: waypoints,
+      locationName: location,
     } = routeData;
 
     console.log("App received route data:", routeData);
@@ -34,6 +36,7 @@ function App() {
     setStartPosition(start);
     setEndPosition(end);
     setCheckpoints(waypoints || []);
+    setLocationName(location || "");
     setFlowState("preview");
   };
 
@@ -70,6 +73,7 @@ function App() {
             startPosition={startPosition}
             endPosition={endPosition}
             checkpoints={checkpoints}
+            locationName={locationName}
             onAnimationComplete={handlePreviewComplete}
           />
           <button

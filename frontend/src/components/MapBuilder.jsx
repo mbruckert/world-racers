@@ -9,6 +9,7 @@ export default function MapBuilder({ onRouteSubmit }) {
   const modeRef = useRef(null);
 
   const [address, setAddress] = useState("");
+  const [locationName, setLocationName] = useState("");
   const [start, setStart] = useState(null);
   const [end, setEnd] = useState(null);
   const [checkpoints, setCheckpoints] = useState([]);
@@ -93,6 +94,15 @@ export default function MapBuilder({ onRouteSubmit }) {
     return () => map.remove();
   }, []);
 
+  const handleAddressChange = (e) => {
+    const newAddress = e.target.value;
+    setAddress(newAddress);
+    // Also update the location name as the user types
+    if (newAddress) {
+      setLocationName(newAddress);
+    }
+  };
+
   const handleGeocode = async () => {
     if (!address) return;
 
@@ -106,6 +116,11 @@ export default function MapBuilder({ onRouteSubmit }) {
       if (data.features && data.features.length > 0) {
         const [lng, lat] = data.features[0].center;
         mapRef.current.flyTo({ center: [lng, lat], zoom: 15 });
+
+        // Extract and store the location name
+        const placeName = data.features[0].place_name;
+        const mainLocation = placeName.split(",")[0];
+        setLocationName(mainLocation);
       } else {
         alert("Location not found.");
       }
@@ -141,12 +156,14 @@ export default function MapBuilder({ onRouteSubmit }) {
     console.log("Start:", start);
     console.log("Finish:", end);
     console.log("Checkpoints:", checkpoints);
+    console.log("Location:", locationName);
 
     // Pass the positions with explicit named parameters
     onRouteSubmit({
       startPosition: start,
       finishPosition: end,
       checkpoints: checkpoints,
+      locationName: locationName || "Unknown Location",
     });
   };
 
@@ -161,7 +178,7 @@ export default function MapBuilder({ onRouteSubmit }) {
           <input
             type="text"
             value={address}
-            onChange={(e) => setAddress(e.target.value)}
+            onChange={handleAddressChange}
             placeholder="Search for a location"
             className="flex-1 outline-none bg-transparent text-gray-600 placeholder:text-gray-400"
           />

@@ -9,11 +9,13 @@ export default function DroneShotOne({
   startPosition,
   endPosition,
   checkpoints = [],
+  locationName = "Unknown Location",
   onAnimationComplete,
 }) {
   const mapContainerRef = useRef();
   const mapRef = useRef();
   const [loadingProgress, setLoadingProgress] = useState(0);
+  const [showLocationName, setShowLocationName] = useState(false);
 
   useEffect(() => {
     // Use provided coordinates or defaults if not available
@@ -339,6 +341,11 @@ export default function DroneShotOne({
       window.requestAnimationFrame(frame);
     });
 
+    // Show location name with delay for a nice entrance effect
+    setTimeout(() => {
+      setShowLocationName(true);
+    }, 1000);
+
     return () => {
       if (mapRef.current) {
         mapRef.current.remove();
@@ -349,6 +356,38 @@ export default function DroneShotOne({
   return (
     <div className="relative w-full h-full">
       <div id="map" ref={mapContainerRef} style={{ height: "100%" }}></div>
+
+      {/* Location Name Overlay with Gradient */}
+      <div
+        className="absolute top-0 left-0 w-full pointer-events-none"
+        style={{
+          background:
+            "linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.6) 30%, rgba(0,0,0,0.3) 60%, rgba(0,0,0,0) 100%)",
+          height: "300px",
+          zIndex: 10,
+        }}
+      >
+        <div
+          className={`flex flex-col items-start justify-start p-10 transition-all duration-1000 ease-out ${
+            showLocationName
+              ? "opacity-100 translate-y-0"
+              : "opacity-0 -translate-y-10"
+          }`}
+        >
+          <div className="flex flex-col">
+            <span className="text-blue-300 text-sm font-medium uppercase tracking-widest mb-1">
+              Now Racing in...
+            </span>
+            <h2 className="text-5xl font-extrabold text-white tracking-wide leading-tight">
+              {locationName}
+            </h2>
+            <div className="flex items-center mt-3">
+              <div className="h-1 w-24 bg-gradient-to-r from-blue-500 to-blue-300 rounded-full"></div>
+              <div className="h-1 w-12 bg-gradient-to-r from-blue-300 to-transparent rounded-full ml-1"></div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {loadingProgress < 100 && (
         <div className="absolute inset-0 bg-black bg-opacity-70 flex items-center justify-center">
