@@ -19,6 +19,8 @@ export default function RaceView({
   startPosition,
   finishPosition,
   checkpoints = [],
+  timeOfDay = "day",
+  weather = "clear",
 }) {
   // Remove debug logs
   const mapContainerRef = useRef(null);
@@ -57,6 +59,17 @@ export default function RaceView({
   const actualFinishPosition = useMemo(() => {
     return finishPosition || defaultFinishPosition;
   }, [finishPosition, defaultFinishPosition]);
+
+  // Get light preset based on time of day
+  const lightPreset = useMemo(() => {
+    const presets = {
+      dawn: "dawn",
+      day: "day",
+      dusk: "dusk",
+      night: "night",
+    };
+    return presets[timeOfDay] || "day";
+  }, [timeOfDay]);
 
   // Second car initial offset - slightly to the right of the primary car
   const secondCarInitialOffset = useMemo(() => {
@@ -133,6 +146,10 @@ export default function RaceView({
 
     // Store the finish position to use consistently throughout the app
     actualFinishPosition: null, // Will be initialized in useEffect
+
+    // Weather and time settings
+    timeOfDay: timeOfDay,
+    weather: weather,
   });
 
   // Debug UI state
@@ -836,7 +853,7 @@ export default function RaceView({
       antialias: true,
       config: {
         basemap: {
-          lightPreset: "dusk",
+          lightPreset: lightPreset, // dawn, day, dusk, or night
           showPointOfInterestLabels: true,
           showPlaceLabels: true,
         },
@@ -872,18 +889,33 @@ export default function RaceView({
         });
       }
 
-      //   map.setRain({
-      //     density: 0.5,
-      //     intensity: 1.0,
-      //     color: "#a8adbc",
-      //     opacity: 0.7,
-      //     vignette: 1,
-      //     "vignette-color": "#464646",
-      //     direction: [0, 80],
-      //     "droplet-size": [2.6, 18.2],
-      //     "distortion-strength": 0.7,
-      //     "center-thinning": 0, // Rain to be displayed on the whole screen area
-      //   });
+      // Apply weather effects based on the weather prop
+      if (weather === "rain") {
+        map.setRain({
+          density: 0.5,
+          intensity: 1.0,
+          color: "#a8adbc",
+          opacity: 0.7,
+          vignette: 1.0,
+          "vignette-color": "#464646",
+          direction: [0, 80],
+          "droplet-size": [2.6, 18.2],
+          "distortion-strength": 0.7,
+          "center-thinning": 0, // Rain to be displayed on the whole screen area
+        });
+      } else if (weather === "snow") {
+        map.setSnow({
+          density: 0.85,
+          intensity: 1.0,
+          color: "#ffffff",
+          opacity: 1.0,
+          vignette: 0.3,
+          "vignette-color": "#ffffff",
+          direction: [0, 50],
+          "particle-size": [1.0, 2.0],
+          "center-thinning": 0.1,
+        });
+      }
 
       // Fetch and display the race route
       fetchAndDisplayRoute(map);
@@ -1214,7 +1246,14 @@ export default function RaceView({
     });
 
     return () => map.remove();
-  }, [initialPosition, defaultFinishPosition, checkpoints]);
+  }, [
+    initialPosition,
+    defaultFinishPosition,
+    checkpoints,
+    lightPreset,
+    weather,
+    timeOfDay,
+  ]);
 
   // Keyboard input
   useEffect(() => {
@@ -1633,6 +1672,21 @@ export default function RaceView({
       {raceStarted && !raceComplete && (
         <div className="absolute top-4 right-4 bg-black bg-opacity-60 text-white p-3 rounded-lg">
           <div className="text-xl font-bold">{raceTime.toFixed(2)}s</div>
+
+          {/* Weather and time indicator */}
+          <div className="mt-1 flex justify-between items-center text-xs text-gray-300">
+            <div className="flex items-center">
+              {timeOfDay === "dawn" && <span>🌅 Dawn</span>}
+              {timeOfDay === "day" && <span>☀️ Day</span>}
+              {timeOfDay === "dusk" && <span>🌆 Dusk</span>}
+              {timeOfDay === "night" && <span>🌙 Night</span>}
+            </div>
+            <div className="ml-4 flex items-center">
+              {weather === "clear" && <span>☀️ Clear</span>}
+              {weather === "rain" && <span>🌧️ Rain</span>}
+              {weather === "snow" && <span>❄️ Snow</span>}
+            </div>
+          </div>
 
           {/* Route distance */}
           {debugInfo.routeDistance && (

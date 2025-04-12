@@ -9,6 +9,8 @@ function App() {
   const [endPosition, setEndPosition] = useState(null);
   const [checkpoints, setCheckpoints] = useState([]);
   const [locationName, setLocationName] = useState("");
+  const [timeOfDay, setTimeOfDay] = useState("day");
+  const [weather, setWeather] = useState("clear");
   const [flowState, setFlowState] = useState("building"); // building, preview, racing
   const [error, setError] = useState("");
 
@@ -24,6 +26,8 @@ function App() {
       finishPosition: end,
       checkpoints: waypoints,
       locationName: location,
+      timeOfDay: time,
+      weather: weatherCondition,
     } = routeData;
 
     console.log("App received route data:", routeData);
@@ -37,6 +41,8 @@ function App() {
     setEndPosition(end);
     setCheckpoints(waypoints || []);
     setLocationName(location || "");
+    setTimeOfDay(time || "day");
+    setWeather(weatherCondition || "clear");
     setFlowState("preview");
   };
 
@@ -91,6 +97,8 @@ function App() {
             startPosition={startPosition}
             finishPosition={endPosition}
             checkpoints={checkpoints}
+            timeOfDay={timeOfDay}
+            weather={weather}
           />
           <button
             onClick={resetFlow}
