@@ -42,7 +42,7 @@ export default function AuthScreen({ onAuthenticated }) {
       }}
     >
       {/* Background Canvas for 3D Globe */}
-      {/* <div className="absolute inset-0 z-0 pointer-events-none">
+      <div className="absolute inset-0 z-0 pointer-events-none">
         <Canvas
           className="w-full h-full"
           camera={{ position: [0, 0, 4], fov: 35 }}
@@ -64,7 +64,7 @@ export default function AuthScreen({ onAuthenticated }) {
           background-color="transparent"
           className="absolute inset-0 z-[-1] pointer-events-none"
         ></night-sky>
-      </div> */}
+      </div>
 
       {/* Main UI content */}
       <div className="z-10 text-center">
