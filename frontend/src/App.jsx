@@ -42,7 +42,11 @@ function App() {
   useEffect(() => {
     // Setup race start handler to sync the race starting across clients
     multiplayerConnection.onRaceStart = () => {
-      console.log("Race start event received in App");
+      console.log("Race start event received in App, current state:", {
+        flowState,
+        party,
+        demoMode,
+      });
 
       // Go straight to race view - skip the preview for non-host players
       if (flowState !== "racing") {
@@ -53,6 +57,7 @@ function App() {
           fetchMapData(party.id).catch(console.error);
         }
 
+        console.log("Transitioning to racing state from:", flowState);
         setFlowState("racing");
       }
     };

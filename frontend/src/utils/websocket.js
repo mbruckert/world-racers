@@ -15,7 +15,11 @@ class MultiplayerConnection {
 
     // API URLs
     this.API_BASE_URL = import.meta.env.VITE_API_URL;
-    this.WS_URL = `${this.API_BASE_URL.replace("http", "ws")}/api/ws`;
+    // Use explicit WebSocket URL construction to avoid Vite development server issues
+    const wsProtocol = this.API_BASE_URL.startsWith("https") ? "wss" : "ws";
+    const apiHost = this.API_BASE_URL.replace(/^https?:\/\//, "");
+    this.WS_URL = `${wsProtocol}://${apiHost}/api/ws`;
+    console.log("WebSocket URL:", this.WS_URL);
   }
 
   connect(userId, partyId) {
@@ -29,6 +33,8 @@ class MultiplayerConnection {
       console.error("Authentication token required for WebSocket connection");
       return;
     }
+
+    console.log(`Connecting to WebSocket at ${this.WS_URL} with token`);
 
     // Connect to WebSocket with authentication token
     this.ws = new WebSocket(`${this.WS_URL}?token=${token}`);
@@ -46,10 +52,11 @@ class MultiplayerConnection {
     // Send Connect message
     const connectMessage = {
       type: "Connect",
-      user_id: this.userId,
-      party_id: this.partyId,
+      user_id: parseInt(this.userId),
+      party_id: parseInt(this.partyId),
     };
 
+    console.log("Sending Connect message:", connectMessage);
     this.sendMessage(connectMessage);
     console.log("Connected to party");
   }

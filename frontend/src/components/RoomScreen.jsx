@@ -72,15 +72,33 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
   useEffect(() => {
     if (!party || !userData.id || isConnectedToWs) return;
 
+    console.log("Connecting to WebSocket in RoomScreen with:", {
+      userId: userData.id,
+      partyId: party.id,
+      partyObject: party,
+    });
+
     // Connect to WebSocket for real-time updates
     multiplayerConnection.connect(userData.id, party.id);
     setIsConnectedToWs(true);
+
+    // Set initial party members
+    if (members.length > 0) {
+      members.forEach((member) => {
+        multiplayerConnection.partyMembers.set(member.id, member.name);
+      });
+    }
+
+    // Add current user to party members if not already there
+    if (userData.id && userData.name) {
+      multiplayerConnection.partyMembers.set(userData.id, userData.name);
+    }
 
     return () => {
       // Don't disconnect here - we want to maintain the connection for the race
       // It will be cleaned up when the user leaves the race or the app
     };
-  }, [party, userData.id, isConnectedToWs]);
+  }, [party, userData.id, isConnectedToWs, members]);
 
   // Fetch user data if not available
   useEffect(() => {
@@ -134,12 +152,20 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
     if (onStartRace && party) {
       // Send race start message to all connected players
       if (multiplayerConnection.isConnected) {
+        console.log("Sending StartRace WebSocket message");
         multiplayerConnection.startRace();
-        console.log("Sent StartRace message");
-      }
 
-      // Make sure we're passing the complete party object
-      onStartRace(party);
+        // Give the message a moment to propagate before navigating
+        setTimeout(() => {
+          console.log("Starting race after WebSocket message sent");
+          onStartRace(party);
+        }, 300);
+      } else {
+        console.warn(
+          "WebSocket not connected, starting race without multiplayer sync"
+        );
+        onStartRace(party);
+      }
     } else if (!party) {
       setError("Please create a party first");
     }
