@@ -3,7 +3,7 @@ import { OrbitControls, Environment } from "@react-three/drei";
 import GlobeModel from "./GlobeModel";
 import logo from "../assets/logo.png";
 
-export default function StartScreen({ handleBypass }) {
+export default function StartScreen({ handleBypass, handleCreateGame }) {
   return (
     <div className="w-screen h-screen bg-gradient-to-b from-[#0f0f2e] to-[#1a1a3f] flex items-center justify-center relative overflow-hidden">
       {/* Background Canvas for 3D Globe */}
@@ -58,7 +58,10 @@ export default function StartScreen({ handleBypass }) {
             </button>
           </div>
 
-          <button className="mt-6 w-full bg-blue-800 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 transition">
+          <button
+            className="mt-6 w-full bg-blue-800 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 transition"
+            onClick={handleCreateGame}
+          >
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"
@@ -74,14 +77,16 @@ export default function StartScreen({ handleBypass }) {
             Create New Game
           </button>
 
-          <button
-            className="mt-6 w-full bg-blue-800 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 transition"
-            onClick={() => {
-              handleBypass();
-            }}
-          >
-            Bypass
-          </button>
+          {handleBypass && (
+            <button
+              className="mt-6 w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 transition"
+              onClick={() => {
+                handleBypass();
+              }}
+            >
+              Bypass (Dev Only)
+            </button>
+          )}
         </div>
       </div>
     </div>
