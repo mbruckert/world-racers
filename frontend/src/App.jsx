@@ -123,6 +123,12 @@ function App() {
       setStartPosition(startPos);
       setEndPosition(endPos);
 
+      // Set location name from map data title
+      if (partyData.mapData.title) {
+        console.log("Setting location name to:", partyData.mapData.title);
+        setLocationName(partyData.mapData.title);
+      }
+
       // Set checkpoints if available
       if (
         partyData.mapData.checkpoints &&
@@ -141,6 +147,85 @@ function App() {
       console.log(
         "No map data found in party data, using existing map settings"
       );
+
+      // For race owner, log current coordinates for debugging
+      console.log("Race owner starting with coordinates:", {
+        startPosition,
+        endPosition,
+        checkpoints: checkpoints.length > 0 ? checkpoints : "none",
+        locationName,
+      });
+
+      // Ensure the coordinates are in the correct format for the owner too
+      // This is important because sometimes the coordinates might not be in the expected array format
+      if (
+        startPosition &&
+        typeof startPosition[0] === "number" &&
+        typeof startPosition[1] === "number"
+      ) {
+        console.log("Start position already in correct format:", startPosition);
+      } else if (
+        startPosition &&
+        startPosition.longitude &&
+        startPosition.latitude
+      ) {
+        // Convert to array format if in object format
+        const formattedStart = [
+          startPosition.longitude,
+          startPosition.latitude,
+        ];
+        console.log(
+          "Converting start position to correct format:",
+          formattedStart
+        );
+        setStartPosition(formattedStart);
+      }
+
+      if (
+        endPosition &&
+        typeof endPosition[0] === "number" &&
+        typeof endPosition[1] === "number"
+      ) {
+        console.log("End position already in correct format:", endPosition);
+      } else if (endPosition && endPosition.longitude && endPosition.latitude) {
+        // Convert to array format if in object format
+        const formattedEnd = [endPosition.longitude, endPosition.latitude];
+        console.log("Converting end position to correct format:", formattedEnd);
+        setEndPosition(formattedEnd);
+      }
+
+      // Check and format checkpoints for consistency
+      if (checkpoints && checkpoints.length > 0) {
+        // Ensure all checkpoints are in [longitude, latitude] array format
+        const formattedCheckpoints = checkpoints
+          .map((checkpoint) => {
+            // If checkpoint is already an array [lng, lat], return as is
+            if (
+              Array.isArray(checkpoint) &&
+              checkpoint.length === 2 &&
+              typeof checkpoint[0] === "number" &&
+              typeof checkpoint[1] === "number"
+            ) {
+              return checkpoint;
+            }
+            // If checkpoint is an object with latitude/longitude properties
+            else if (
+              checkpoint &&
+              typeof checkpoint === "object" &&
+              "longitude" in checkpoint &&
+              "latitude" in checkpoint
+            ) {
+              return [checkpoint.longitude, checkpoint.latitude];
+            }
+            return null;
+          })
+          .filter((checkpoint) => checkpoint !== null);
+
+        if (formattedCheckpoints.length !== checkpoints.length) {
+          console.log("Reformatted checkpoints:", formattedCheckpoints);
+          setCheckpoints(formattedCheckpoints);
+        }
+      }
     }
 
     // Go to preview before racing
@@ -195,6 +280,12 @@ function App() {
             (cp) => [cp.longitude, cp.latitude]
           );
           setCheckpoints(formattedCheckpoints);
+        }
+
+        // Set location name from map data title
+        if (partyData.mapData.title) {
+          console.log("Setting location name to:", partyData.mapData.title);
+          setLocationName(partyData.mapData.title);
         }
       }
 
