@@ -12,6 +12,7 @@ use tower_http::trace::{self, TraceLayer};
 use tracing::Level;
 
 use crate::db::AppState;
+use ::auth::middleware::auth_middleware;
 
 pub fn create_router(state: AppState) -> Router {
     let cors = CorsLayer::new()
@@ -26,15 +27,24 @@ pub fn create_router(state: AppState) -> Router {
         .on_request(trace::DefaultOnRequest::new().level(Level::INFO))
         .on_failure(trace::DefaultOnFailure::new().level(Level::ERROR));
 
-    // Create router with empty state first, then add real state at the end
-    Router::new()
+    // Public routes that don't require authentication
+    let public_routes = Router::new()
         .nest("/api", health::router())
+        .nest("/api", auth::router())
+        .merge(openapi::swagger_ui());
+
+    // Protected routes that require authentication
+    let protected_routes = Router::new()
         .nest("/api", maps::router())
         .nest("/api", parties::router())
         .nest("/api", users::router())
         .nest("/api", ws::router())
-        .nest("/api", auth::router())
-        .merge(openapi::swagger_ui())
+        .layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
+
+    // Combine public and protected routes
+    Router::new()
+        .merge(public_routes)
+        .merge(protected_routes)
         .layer(cors)
         .layer(trace_layer)
         .with_state(state)
