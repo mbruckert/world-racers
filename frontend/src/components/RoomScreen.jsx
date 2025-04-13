@@ -72,9 +72,30 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
       }
     };
 
+    // Set up handler for new party members
+    multiplayerConnection.onNewPartyMember = (data) => {
+      console.log("New party member joined:", data);
+      // Update the members list immediately instead of waiting for polling
+      setMembers((prevMembers) => {
+        // Check if member is already in the list
+        if (!prevMembers.some((member) => member.id === data.user_id)) {
+          return [
+            ...prevMembers,
+            {
+              id: data.user_id,
+              name: data.name,
+              is_owner: false, // Assume not owner since they're joining
+            },
+          ];
+        }
+        return prevMembers;
+      });
+    };
+
     // Clean up handler on unmount
     return () => {
       multiplayerConnection.onRaceStart = null;
+      multiplayerConnection.onNewPartyMember = null;
     };
   }, [onStartRace, party]);
 
