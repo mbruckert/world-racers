@@ -60,6 +60,18 @@ function App() {
     }
   };
 
+  const handleSendCode = () => {
+    setFlowState("room");
+  };
+
+  const handleCreateGame = () => {
+    setFlowState("mapSelect");
+  };
+
+  const handleBypass = () => {
+    setFlowState("building");
+  };
+
   return (
     <div className="w-full h-screen">
       {error && (
@@ -68,7 +80,7 @@ function App() {
         </div>
       )}
 
-      {flowState == "start" && <StartScreen />}
+      {flowState == "start" && <StartScreen handleBypass={handleBypass} />}
 
       {flowState === "building" && (
         <MapBuilder onRouteSubmit={handleRouteSubmit} />
@@ -101,12 +113,6 @@ function App() {
             timeOfDay={timeOfDay}
             weather={weather}
           />
-          <button
-            onClick={resetFlow}
-            className="absolute top-4 right-4 bg-indigo-600 text-white px-4 py-2 rounded-lg shadow"
-          >
-            Build New Route
-          </button>
         </div>
       )}
     </div>

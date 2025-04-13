@@ -42,6 +42,11 @@ export default function DroneShotOne({
       bearing: -177.2,
       style: "mapbox://styles/mapbox/standard",
       interactive: false,
+      maxPitch: 85,
+      minZoom: initialZoom - 5,
+      maxZoom: initialZoom + 5,
+      renderWorldCopies: false,
+      fadeDuration: 0,
       config: {
         baseMap: {
           lightPreset: "dusk",
@@ -52,23 +57,24 @@ export default function DroneShotOne({
     mapRef.current.on("style.load", () => {
       const map = mapRef.current;
 
+      // Optimized fog settings with reduced range
       map.setFog({
         color: "rgb(186, 210, 235)", // light blue
         "high-color": "rgb(36, 92, 223)", // blue
         "horizon-blend": 0.02,
         "space-color": "rgb(11, 11, 25)", // dark blue-black
-        "star-intensity": 0.6, // brightness of stars (0-1)
-        range: [1, 8], // Start and end distances for fog effect (in km)
+        "star-intensity": 0.4, // reduced from 0.6
+        range: [0.5, 4], // Reduced range (was [1, 8])
       });
 
-      // Add terrain
+      // Add terrain with reduced exaggeration
       map.addSource("mapbox-dem", {
         type: "raster-dem",
         url: "mapbox://mapbox.mapbox-terrain-dem-v1?optimize=true",
         tileSize: 256,
-        maxzoom: 14,
+        maxzoom: 12, // Reduced from 14
       });
-      map.setTerrain({ source: "mapbox-dem", exaggeration: 1.5 });
+      map.setTerrain({ source: "mapbox-dem", exaggeration: 1.2 }); // Reduced from 1.5
 
       // Create waypoints array for the route including checkpoints
       const waypoints = [start];
@@ -81,10 +87,7 @@ export default function DroneShotOne({
       // Add end position as the last point
       waypoints.push(end);
 
-      // Log for debugging
-      console.log("DroneShotOne - Route waypoints:", waypoints);
-
-      // Add markers for start, checkpoints, and end
+      // Add markers for start, checkpoints, and end with simplified styles
       new mapboxgl.Marker({ color: "#00FF00" }).setLngLat(start).addTo(map);
 
       // Add checkpoint markers
@@ -98,7 +101,6 @@ export default function DroneShotOne({
           el.style.height = "20px";
           el.style.borderRadius = "50%";
           el.style.border = "3px solid #ff9900";
-          el.style.boxShadow = "0 0 10px rgba(255, 217, 0, 0.7)";
 
           // Add checkpoint number
           const label = document.createElement("div");
@@ -117,7 +119,7 @@ export default function DroneShotOne({
 
       new mapboxgl.Marker({ color: "#FF0000" }).setLngLat(end).addTo(map);
 
-      // Add a line for the complete route
+      // Add a line for the complete route with optimized settings
       map.addSource("route", {
         type: "geojson",
         data: {
@@ -130,7 +132,7 @@ export default function DroneShotOne({
         },
       });
 
-      // Add route layer - a glowing effect with two lines (similar to RaceView)
+      // Simplified route layers with performance-friendly settings
       map.addLayer({
         id: "route-glow",
         type: "line",
@@ -141,9 +143,9 @@ export default function DroneShotOne({
         },
         paint: {
           "line-color": "#4882c5",
-          "line-width": 12,
-          "line-opacity": 0.6,
-          "line-blur": 3,
+          "line-width": 8, // Reduced from 12
+          "line-opacity": 0.5, // Reduced from 0.6
+          "line-blur": 2, // Reduced from 3
         },
       });
 
@@ -157,7 +159,7 @@ export default function DroneShotOne({
         },
         paint: {
           "line-color": "#2b98f0",
-          "line-width": 4,
+          "line-width": 3, // Reduced from 4
           "line-dasharray": [0.5, 1.5],
           "line-opacity": 0.7,
         },
@@ -191,6 +193,7 @@ export default function DroneShotOne({
 
     let animationIndex = 0;
     let animationTime = 0.0;
+    let lastTimestamp = 0;
 
     mapRef.current.once("idle", () => {
       const lerp = (a, b, t) => {
@@ -221,41 +224,90 @@ export default function DroneShotOne({
       // Perpendicular vector for side views (rotate 90 degrees)
       const perpVector = [-normalizedDirection[1], normalizedDirection[0]];
 
+      // Using the same animation steps but with smoother transitions and optimized altitude values
       const animations = [
         {
           duration: 5000.0,
           animate: (phase) => {
             const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
-            // Start high above the starting point, then dive down
+            // More dramatic and closer first shot - very close to course
+
+            // Reduced side offset to stay closer to route
+            const sideOffset = 0.0015; // Half the previous value
+            const curveAmount = Math.sin(phase * Math.PI) * 0.001;
+
+            // Position almost on the route
             const position = [
-              start[0] + normalizedDirection[0] * phase * 0.2,
-              start[1] + normalizedDirection[1] * phase * 0.2,
+              start[0] +
+                perpVector[0] * (1 - phase) * sideOffset +
+                normalizedDirection[0] * phase * 0.05,
+              start[1] +
+                perpVector[1] * (1 - phase) * sideOffset +
+                normalizedDirection[1] * phase * 0.05 +
+                curveAmount,
             ];
-            const altitude = lerp(2000.0, 300.0, easeOutCubic(phase));
-            const target = start;
+
+            // Much lower altitude to focus on course
+            const altitude = lerp(250.0, 150.0, easeOutCubic(phase));
+
+            // Target directly on route
+            const lookAheadAmount = 0.003 * phase;
+            const target = [
+              start[0] + normalizedDirection[0] * lookAheadAmount,
+              start[1] + normalizedDirection[1] * lookAheadAmount,
+            ];
 
             updateCameraPosition(position, altitude, target);
           },
+          prevPosition: null,
+          prevAltitude: null,
+          prevTarget: null,
         },
         {
           duration: 6000.0,
           animate: (phase) => {
-            // Flyover along the course at lower altitude
+            // Smoother flyover with stabilized camera movement
+
+            // Apply bezier easing for smoother acceleration/deceleration
+            const easeInOutCubic = (t) =>
+              t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+            const easedPhase = easeInOutCubic(phase);
+
+            // Get position almost on the course with minimal drift
+            const drift = Math.sin(phase * Math.PI * 2) * 0.0003;
             const position = [
-              start[0] + directionVector[0] * phase,
-              start[1] + directionVector[1] * phase,
+              start[0] +
+                directionVector[0] * easedPhase +
+                perpVector[0] * drift,
+              start[1] +
+                directionVector[1] * easedPhase +
+                perpVector[1] * drift,
             ];
 
-            // Look slightly ahead
-            const lookAheadFactor = Math.min(0.2, (1 - phase) * 0.3);
+            // Tight focus on course ahead
+            const lookAheadBase = 0.01;
+            const lookAheadVariable = Math.sin(phase * Math.PI) * 0.01;
+            const lookAheadFactor = Math.max(
+              0.005,
+              lookAheadBase + lookAheadVariable
+            );
+
             const target = [
               position[0] + normalizedDirection[0] * lookAheadFactor,
               position[1] + normalizedDirection[1] * lookAheadFactor,
             ];
 
-            const altitude = lerp(300, 350, Math.sin(phase * Math.PI));
+            // Very low altitude to focus directly on course
+            const baseAltitude = 180; // Even lower than before
+            const altitudeVariation = 20;
+            const altitude =
+              baseAltitude + Math.sin(phase * Math.PI * 3) * altitudeVariation;
+
             updateCameraPosition(position, altitude, target);
           },
+          prevPosition: null,
+          prevAltitude: null,
+          prevTarget: null,
         },
         {
           duration: 5000.0,
@@ -265,24 +317,35 @@ export default function DroneShotOne({
                 ? 16 * t * t * t * t * t
                 : 1 - Math.pow(-2 * t + 2, 5) / 2;
 
-            // Side view of the course, moving from midpoint
-            const midPoint = [
-              start[0] + directionVector[0] * 0.5,
-              start[1] + directionVector[1] * 0.5,
+            // Keep focus on the course with a closer side view
+            const courseProgress = 0.3 + phase * 0.4; // View middle section of course
+            const viewPoint = [
+              start[0] + directionVector[0] * courseProgress,
+              start[1] + directionVector[1] * courseProgress,
             ];
 
-            // Orbit around mid point
-            const angle = phase * Math.PI * 2;
-            const orbitRadius = 0.005;
+            // Orbit closer to the course with smaller radius
+            const angle = phase * Math.PI * 1.5; // Less than full rotation
+            const orbitRadius = 0.003; // Smaller orbit radius
 
             const position = [
-              midPoint[0] + Math.cos(angle) * orbitRadius,
-              midPoint[1] + Math.sin(angle) * orbitRadius,
+              viewPoint[0] + Math.cos(angle) * orbitRadius,
+              viewPoint[1] + Math.sin(angle) * orbitRadius,
             ];
 
-            const altitude = lerp(500, 800, easeInOutQuint(phase));
-            updateCameraPosition(position, altitude, midPoint);
+            // Keep camera looking at course
+            const courseTargetPoint = [
+              viewPoint[0] + normalizedDirection[0] * 0.001,
+              viewPoint[1] + normalizedDirection[1] * 0.001,
+            ];
+
+            // Lower altitude to stay focused on course
+            const altitude = lerp(280, 350, easeInOutQuint(phase));
+            updateCameraPosition(position, altitude, courseTargetPoint);
           },
+          prevPosition: null,
+          prevAltitude: null,
+          prevTarget: null,
         },
         {
           duration: 4000.0,
@@ -294,21 +357,35 @@ export default function DroneShotOne({
             ];
 
             const position = lerp(startPos, end, phase);
-            const altitude = lerp(400, 200, phase);
 
-            updateCameraPosition(position, altitude, end);
+            // Look slightly ahead of our position to see the finish
+            const target = [
+              end[0] + normalizedDirection[0] * 0.001,
+              end[1] + normalizedDirection[1] * 0.001,
+            ];
+
+            // Stay low to the ground for dramatic finish
+            const altitude = lerp(250, 180, phase);
+
+            updateCameraPosition(position, altitude, target);
           },
+          prevPosition: null,
+          prevAltitude: null,
+          prevTarget: null,
         },
       ];
 
-      let lastTime = 0.0;
-      let totalDuration = animations.reduce(
-        (sum, anim) => sum + anim.duration,
-        0
-      );
       let finishTimeout;
+      let frameCount = 0;
+      const frameSkip = 0; // Can be increased to 1 or 2 if needed for performance
 
-      function frame(time) {
+      function frame(timestamp) {
+        frameCount++;
+        if (frameCount % (frameSkip + 1) !== 0) {
+          window.requestAnimationFrame(frame);
+          return;
+        }
+
         if (animationIndex >= animations.length) {
           // All animations complete
           if (!finishTimeout) {
@@ -319,16 +396,26 @@ export default function DroneShotOne({
           return;
         }
 
+        // Calculate elapsed time with timestamp clamping for stability
+        const elapsed = lastTimestamp
+          ? Math.min(Math.max(timestamp - lastTimestamp, 16), 50)
+          : 16.7;
+        lastTimestamp = timestamp;
+
         const current = animations[animationIndex];
 
         if (animationTime < current.duration) {
           const phase = animationTime / current.duration;
-          current.animate(phase);
+
+          // Apply the animation with motion smoothing
+          try {
+            current.animate(phase);
+          } catch (e) {
+            console.error("Animation error:", e);
+          }
         }
 
-        const elapsed = time - lastTime;
         animationTime += elapsed;
-        lastTime = time;
 
         if (animationTime > current.duration) {
           animationIndex++;
