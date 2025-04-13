@@ -39,8 +39,8 @@ class CarPhysics {
             baseDragFactor: 0.988,
             baseAcceleration: 0.0003,  // reduced by 70% from 0.002
             maxAccelerationBonus: 0.0003,  // reduced by 70% from 0.003
-            initialMaxSpeed: 0.0000032,
-            maxPossibleSpeed: 0.0000064,
+            initialMaxSpeed: 0.0000064,
+            maxPossibleSpeed: 0.0000128,
             maxReverseSpeed: 0.0000016,
             steeringFactorBase: 0.0015,  // reduced from 0.003
             maxSteeringForceBase: 0.05,  // reduced from 0.08
@@ -175,8 +175,8 @@ class CarPhysics {
     /**
      * Check if car is on the route
      */
-    isCarOnRoute(routeCoords) {
-        if (!routeCoords || routeCoords.length < 2) return true;
+    checkRouteProximity(routeCoords) {
+        if (!routeCoords || routeCoords.length < 2) return { isOnRoute: true };
 
         // For direct line segments, we need to find the closest line segment
         let minDistance = Infinity;
@@ -199,17 +199,29 @@ class CarPhysics {
             minDistance = Math.min(minDistance, distance);
         }
 
-        // Define max allowed distance from route (adjust as needed)
-        // This is the width of the invisible wall corridor
-        const maxDistanceFromRoute = 0.0003; // ~30-40 meters depending on latitude
+        // Define warning and boundary distances
+        const warningDistance = 0.0003;   // ~30-40 meters - warning zone
+        const boundaryDistance = 0.0005;  // ~70 meters - off-track zone
 
-        return minDistance <= maxDistanceFromRoute;
+        return {
+            isOnRoute: minDistance <= boundaryDistance,
+            isInWarningZone: minDistance > warningDistance && minDistance <= boundaryDistance,
+            isOffTrack: minDistance > boundaryDistance,
+            distance: minDistance
+        };
+    }
+
+    /**
+     * Check if car is on the route (legacy method for compatibility)
+     */
+    isCarOnRoute(routeCoords) {
+        return this.checkRouteProximity(routeCoords).isOnRoute;
     }
 
     /**
      * Update car physics state based on controls and delta time
      */
-    update(dt, routeCoordinates, offTrackCallback) {
+    update(dt, routeCoordinates, offTrackCallback, warningCallback) {
         // Frame-based timing (matching exp_2.html)
         const frameIncrement = 1; // Each frame in the demo increments by 1
 
@@ -217,7 +229,7 @@ class CarPhysics {
         this.handleSteering(dt);
         this.applyPhysics(dt);
         this.applyRoll(dt);
-        this.updatePosition(dt, routeCoordinates, offTrackCallback);
+        this.updatePosition(dt, routeCoordinates, offTrackCallback, warningCallback);
 
         // Return current state for rendering
         return {
@@ -340,7 +352,7 @@ class CarPhysics {
         this.carRoll = targetRoll; // Direct assignment as in the demo
     }
 
-    updatePosition(dt, routeCoordinates, offTrackCallback) {
+    updatePosition(dt, routeCoordinates, offTrackCallback, warningCallback) {
         // Update velocity based on heading and speed
         if (Math.abs(this.carSpeed) > 1e-9) {
             const vx = this.carSpeed * Math.sin(this.carHeading);
@@ -353,30 +365,42 @@ class CarPhysics {
                 this.carPosition[1] + this.carVelocity[1],
             ];
 
-            // Check if car is going off-route
-            if (
-                routeCoordinates &&
-                routeCoordinates.length > 0 &&
-                !this.isCarOnRoute(routeCoordinates)
-            ) {
-                // Car is trying to go off-route - prevent it
-                // Reduce speed significantly
-                this.carSpeed *= 0.2;
+            // Check car's proximity to route
+            if (routeCoordinates && routeCoordinates.length > 0) {
+                const routeStatus = this.checkRouteProximity(routeCoordinates);
 
-                // Call the off-track callback function if provided
-                if (offTrackCallback) {
-                    offTrackCallback();
+                if (routeStatus.isOffTrack) {
+                    // Car is trying to go off-route beyond boundary - prevent it
+                    // Reduce speed significantly
+                    this.carSpeed *= 0.2;
+
+                    // Call the off-track callback function if provided
+                    if (offTrackCallback) {
+                        offTrackCallback("Turn around! You're too far from the track!");
+                    }
+
+                    // Keep car at current position with minimal movement
+                    // This creates a "sliding along wall" effect
+                    const bounceBackFactor = 0.02;
+                    this.carPosition = [
+                        this.carPosition[0] + this.carVelocity[0] * bounceBackFactor,
+                        this.carPosition[1] + this.carVelocity[1] * bounceBackFactor,
+                    ];
+                } else if (routeStatus.isInWarningZone) {
+                    // Car is in warning zone but not off-track yet
+                    if (warningCallback) {
+                        warningCallback("Warning: Getting off track!");
+                    }
+
+                    // Allow movement but with slight penalty
+                    this.carSpeed *= 0.98;
+                    this.carPosition = tentativeNewPos;
+                } else {
+                    // Car is on route, proceed with normal movement
+                    this.carPosition = tentativeNewPos;
                 }
-
-                // Keep car at current position with minimal movement
-                // This creates a "sliding along wall" effect
-                const bounceBackFactor = 0.02;
-                this.carPosition = [
-                    this.carPosition[0] + this.carVelocity[0] * bounceBackFactor,
-                    this.carPosition[1] + this.carVelocity[1] * bounceBackFactor,
-                ];
             } else {
-                // Car is on route or no route loaded yet, proceed with normal movement
+                // No route coordinates available, proceed with normal movement
                 this.carPosition = tentativeNewPos;
             }
         }

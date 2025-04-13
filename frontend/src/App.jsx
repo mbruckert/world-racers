@@ -127,17 +127,6 @@ function App() {
     setFlowState("racing");
   };
 
-  const resetFlow = () => {
-    // Confirm before resetting if in racing mode
-    if (flowState === "racing") {
-      if (window.confirm("Are you sure you want to build a new route?")) {
-        setFlowState("mapSelect");
-      }
-    } else {
-      setFlowState("mapSelect");
-    }
-  };
-
   const handleCreateGame = () => {
     setFlowState("mapSelect");
   };
@@ -253,10 +242,10 @@ function App() {
             onAnimationComplete={handlePreviewComplete}
           />
           <button
-            onClick={resetFlow}
+            onClick={handlePreviewComplete}
             className="absolute top-4 right-4 bg-indigo-600 text-white px-4 py-2 rounded-lg shadow"
           >
-            Cancel Preview
+            Skip Preview
           </button>
         </div>
       )}
