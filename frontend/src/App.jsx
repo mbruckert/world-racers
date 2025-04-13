@@ -45,19 +45,12 @@ function App() {
   const handleRouteSubmit = (routeData) => {
     // Extract route data from the object that MapBuilder now sends
     const {
-      id,
-      title,
-      description,
       startPosition: start,
       finishPosition: end,
       checkpoints: waypoints,
       locationName: location,
       timeOfDay: time,
       weather: weatherCondition,
-      start_longitude,
-      start_latitude,
-      end_longitude,
-      end_latitude,
     } = routeData;
 
     console.log("App received route data:", routeData);
@@ -67,32 +60,10 @@ function App() {
       return;
     }
 
-    // Store complete map data
-    setSelectedMap({
-      id: id,
-      title: title || location || "",
-      description: description || "",
-      start_longitude: start_longitude || start[0],
-      start_latitude: start_latitude || start[1],
-      end_longitude: end_longitude || end[0],
-      end_latitude: end_latitude || end[1],
-      checkpoints:
-        waypoints?.map((point, index) => ({
-          longitude: point[0],
-          latitude: point[1],
-          position: index + 1,
-        })) || [],
-    });
-
     setStartPosition(start);
     setEndPosition(end);
     setCheckpoints(waypoints || []);
-
-    // Set location name ensuring we use the most specific information
-    const mapName = title || location || "Unknown Location";
-    console.log("Setting location name in handleRouteSubmit:", mapName);
-    setLocationName(mapName);
-
+    setLocationName(location || "");
     setTimeOfDay(time || "day");
     setWeather(weatherCondition || "clear");
 
@@ -101,16 +72,7 @@ function App() {
   };
 
   const handleSelectMap = (map) => {
-    console.log("Selected map:", map);
-
-    // Store complete map data with all necessary fields
-    setSelectedMap({
-      ...map,
-      id: map.id,
-      title: map.title || "Unknown Location",
-      description: map.description || "",
-    });
-
+    setSelectedMap(map);
     // Convert the map data from API format to app format
     setStartPosition([map.start_longitude, map.start_latitude]);
     setEndPosition([map.end_longitude, map.end_latitude]);
@@ -127,15 +89,7 @@ function App() {
       setCheckpoints([]);
     }
 
-    // Set the location name from the map title
-    console.log("Setting location name in handleSelectMap:", map.title);
-    setLocationName(map.title || "Unknown Location");
-
-    // Debug check before transitioning
-    console.log("Map data before room transition:", {
-      selectedMap: { ...map },
-      locationName: map.title || "Unknown Location",
-    });
+    setLocationName(map.title || "");
 
     // Go to room creation instead of preview
     setFlowState("room");
@@ -201,15 +155,6 @@ function App() {
         checkpoints: checkpoints.length > 0 ? checkpoints : "none",
         locationName,
       });
-
-      // Make sure to set the location name from the selectedMap if available
-      if (selectedMap && selectedMap.title) {
-        console.log(
-          "Setting location name from selectedMap:",
-          selectedMap.title
-        );
-        setLocationName(selectedMap.title);
-      }
 
       // Ensure the coordinates are in the correct format for the owner too
       // This is important because sometimes the coordinates might not be in the expected array format
@@ -282,9 +227,6 @@ function App() {
         }
       }
     }
-
-    // Debug log final locationName value before transition
-    console.log("FINAL locationName before preview:", locationName);
 
     // Go to preview before racing
     setFlowState("preview");
@@ -423,14 +365,12 @@ function App() {
           onStartRace={handleStartRace}
           onCancel={handleCancelRoom}
           party={party}
-          key={`room-${selectedMap?.id || "new"}-${Date.now()}`}
         />
       )}
 
       {flowState === "preview" && (
         <div className="relative h-full">
           <DroneShotOne
-            key={`drone-${locationName}-${Date.now()}`}
             startPosition={startPosition}
             endPosition={endPosition}
             checkpoints={checkpoints}

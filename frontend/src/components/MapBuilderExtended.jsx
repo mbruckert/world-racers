@@ -269,43 +269,15 @@ export default function MapBuilderExtended({ onRouteSubmit }) {
     const saved = await saveMapToApi();
 
     if (saved) {
-      try {
-        // Fetch the most recently created map
-        const response = await fetchWithAuth(
-          `/maps?author_id=${userData.id}&limit=1&sort=created_at:desc`
-        );
-        if (!response.ok) {
-          throw new Error("Could not retrieve saved map");
-        }
-
-        const maps = await response.json();
-        if (maps.length > 0) {
-          const savedMap = maps[0];
-
-          // Proceed with the normal flow with complete map data
-          onRouteSubmit({
-            id: savedMap.id,
-            title: savedMap.title,
-            description: savedMap.description,
-            start_longitude: start[0],
-            start_latitude: start[1],
-            end_longitude: end[0],
-            end_latitude: end[1],
-            startPosition: start,
-            finishPosition: end,
-            checkpoints: checkpoints,
-            locationName: locationName || "Unknown Location",
-            timeOfDay,
-            weather,
-          });
-        } else {
-          throw new Error("Saved map not found");
-        }
-      } catch (err) {
-        setError(
-          "Map was saved but couldn't be loaded for race. Please try again."
-        );
-      }
+      // Proceed with the normal flow if save was successful
+      onRouteSubmit({
+        startPosition: start,
+        finishPosition: end,
+        checkpoints: checkpoints,
+        locationName: locationName || "Unknown Location",
+        timeOfDay,
+        weather,
+      });
     }
   };
 
@@ -460,9 +432,8 @@ export default function MapBuilderExtended({ onRouteSubmit }) {
                 onChange={(e) => setTimeOfDay(e.target.value)}
                 className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none"
               >
-                <option value="dawn">Dawn</option>
                 <option value="day">Day</option>
-                <option value="dusk">Dusk</option>
+                <option value="sunset">Sunset</option>
                 <option value="night">Night</option>
               </select>
             </div>
@@ -475,9 +446,9 @@ export default function MapBuilderExtended({ onRouteSubmit }) {
                 className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg focus:outline-none"
               >
                 <option value="clear">Clear</option>
-                <option value="snow">Snow</option>
-                <option value="rain">Rainy</option>
-                <option value="fog">Foggy</option>
+                <option value="cloudy">Cloudy</option>
+                <option value="rainy">Rainy</option>
+                <option value="foggy">Foggy</option>
               </select>
             </div>
           </div>

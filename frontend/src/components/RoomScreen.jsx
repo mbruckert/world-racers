@@ -21,116 +21,6 @@ export default function RoomScreen({
   const [userData, setUserData] = useState(getUserData());
   const [partyMapData, setPartyMapData] = useState(null);
   const [isMapLoading, setIsMapLoading] = useState(false);
-  const [forceUpdateKey, setForceUpdateKey] = useState(0);
-  const [mapTitle, setMapTitle] = useState(mapData?.title || "");
-
-  // Initialize map title from mapData when component mounts
-  useEffect(() => {
-    if (mapData?.title) {
-      console.log("Initial map title set to:", mapData.title);
-      setMapTitle(mapData.title);
-    }
-  }, []);
-
-  // Force a re-render when needed
-  const forceUpdate = () => {
-    setForceUpdateKey((prev) => prev + 1);
-  };
-
-  // Debug log for mapData prop
-  useEffect(() => {
-    console.log("RoomScreen received mapData:", mapData);
-    if (mapData && mapData.id) {
-      console.log("Map ID:", mapData.id, "Map Title:", mapData.title);
-      // Only set the map title if it's not already set or has changed
-      if (mapData.title && (!mapTitle || mapTitle !== mapData.title)) {
-        console.log("Setting mapTitle from mapData prop:", mapData.title);
-        setMapTitle(mapData.title);
-      }
-    }
-  }, [mapData, mapTitle]);
-
-  // Add additional debugging to track when map data changes
-  useEffect(() => {
-    if (partyMapData) {
-      console.log("partyMapData updated:", partyMapData);
-      if (partyMapData.title) {
-        console.log("Setting mapTitle from partyMapData:", partyMapData.title);
-        setMapTitle(partyMapData.title);
-      }
-      forceUpdate();
-    }
-  }, [partyMapData]);
-
-  // Also force update when party changes
-  useEffect(() => {
-    if (party) {
-      console.log("Party updated, forcing refresh of map title");
-
-      // If we have partyMapData with a title, set it now
-      if (partyMapData && partyMapData.title) {
-        console.log(
-          "Setting mapTitle from partyMapData in party update:",
-          partyMapData.title
-        );
-        setMapTitle(partyMapData.title);
-      }
-      // Otherwise, if we have mapData with a title, set it now
-      else if (mapData && mapData.title) {
-        console.log(
-          "Setting mapTitle from mapData in party update:",
-          mapData.title
-        );
-        setMapTitle(mapData.title);
-      }
-
-      forceUpdate();
-    }
-  }, [party, partyMapData, mapData]);
-
-  // Return the correct map title to display
-  const getMapDisplayTitle = () => {
-    // If we have a direct map title set, use it (highest priority)
-    if (mapTitle) {
-      console.log("Using directly set map title:", mapTitle);
-      return mapTitle;
-    }
-
-    // Log all available map data sources for debugging
-    console.log("Map display title sources:", {
-      mapDataTitle: mapData?.title,
-      partyMapDataTitle: partyMapData?.title,
-      rawMapId: mapData?.id,
-      partyMapId: party?.map_id,
-    });
-
-    // First priority: Use partyMapData if available
-    if (partyMapData && partyMapData.title) {
-      console.log("Using title from partyMapData:", partyMapData.title);
-      return partyMapData.title;
-    }
-
-    // Second priority: Use mapData from props if it's available and matches the party's map_id
-    if (
-      party &&
-      party.map_id &&
-      mapData &&
-      mapData.id &&
-      party.map_id === mapData.id
-    ) {
-      console.log("Using title from mapData (ID match):", mapData.title);
-      return mapData.title;
-    }
-
-    // Third priority: Use mapData if available
-    if (mapData && mapData.title) {
-      console.log("Using title from mapData (no ID match):", mapData.title);
-      return mapData.title;
-    }
-
-    // Default fallback
-    return "Custom Map";
-  };
 
   // Check if the user is a joiner (not the owner)
   const isJoiner = party && party.isJoiner === true;
@@ -158,26 +48,8 @@ export default function RoomScreen({
       partyMapId: party?.map_id,
       hasPartyMapData: !!partyMapData,
       isLoading: isMapLoading,
-      mapDataFromProps: mapData,
       shouldFetch: !!(party && party.map_id && !partyMapData && !isMapLoading),
     });
-
-    // If mapData from props has the same ID as the party map_id, use it directly
-    if (
-      party &&
-      mapData &&
-      party.map_id &&
-      mapData.id &&
-      party.map_id === mapData.id
-    ) {
-      console.log(
-        "Using map data from props, IDs match:",
-        mapData.id,
-        party.map_id
-      );
-      setPartyMapData(mapData);
-      return;
-    }
 
     // Only fetch if we have a party with map_id but no map data yet
     if (party && party.map_id && !partyMapData && !isMapLoading) {
@@ -351,17 +223,6 @@ export default function RoomScreen({
 
       const partyName = mapData?.title || "New Race";
 
-      // IMPORTANT: Set the map title directly - use an explicit update
-      if (mapData?.title) {
-        console.log("Setting map title before party creation:", mapData.title);
-        setMapTitle(mapData.title);
-      }
-
-      // Ensure we have a map ID
-      if (!mapData || !mapData.id) {
-        throw new Error("Map data is missing or incomplete. Please try again.");
-      }
-
       const response = await fetchWithAuth(`/parties`, {
         method: "POST",
         body: JSON.stringify({
@@ -381,24 +242,7 @@ export default function RoomScreen({
       multiplayerConnection.connect(userId, data.id);
       console.log(`Connected to party ${data.id} as creator`);
 
-      // When creating a party with mapData, immediately set partyMapData to use the same data
-      // This ensures we display the correct map name right away
-      if (mapData) {
-        console.log(
-          "Setting partyMapData directly from mapData:",
-          mapData.title
-        );
-        setPartyMapData({ ...mapData });
-
-        // Ensure map title is explicitly set again after data is loaded
-        setMapTitle(mapData.title);
-      }
-
-      // Set party state
       setParty(data);
-
-      // Force a UI update
-      forceUpdate();
     } catch (err) {
       setError(err.message || "Failed to create party. Please try again.");
     } finally {
@@ -425,9 +269,6 @@ export default function RoomScreen({
   const handleStartRace = () => {
     if (party) {
       console.log("Starting race for party:", party.id);
-      console.log("Available map data sources:");
-      console.log("1. Props mapData:", mapData);
-      console.log("2. Party map data:", partyMapData);
 
       // Verify connection status before sending
       if (multiplayerConnection.isConnected) {
@@ -456,36 +297,77 @@ export default function RoomScreen({
       // Also call the onStartRace callback
       if (onStartRace) {
         console.log("Calling onStartRace callback");
-
-        // Determine which map data to use (priority order)
-        let mapDataToUse = null;
-
-        // 1. First choice: If props mapData and party map_id match, use mapData
-        if (mapData && party.map_id && mapData.id === party.map_id) {
-          console.log("Using map data from props (ID match):", mapData.id);
-          mapDataToUse = mapData;
-        }
-        // 2. Second choice: If we have fetched partyMapData, use it
-        else if (partyMapData) {
-          console.log("Using fetched party map data:", partyMapData.id);
-          mapDataToUse = partyMapData;
-        }
-        // 3. Third choice: If we have mapData from props (but ID doesn't match), use it
-        else if (mapData) {
-          console.log("Using map data from props (no ID match):", mapData.id);
-          mapDataToUse = mapData;
-        }
-
-        if (mapDataToUse) {
+        // Include map data for both creator and joiner
+        if (partyMapData) {
+          // First priority: If we have fetched map data with checkpoints, use it
           const partyWithMapData = {
             ...party,
-            mapData: mapDataToUse,
+            mapData: partyMapData,
           };
-          console.log("Starting race with map data:", mapDataToUse.title);
+          console.log("Starting race with fetched map data:", partyMapData);
           onStartRace(partyWithMapData);
+        } else if (mapData) {
+          // If we're the creator and don't have fetched map data, but have map data from props
+          console.log(
+            "Starting race with component map data but fetching checkpoints first..."
+          );
+
+          // Fetch map details to ensure we have complete checkpoint data
+          const fetchAndStartWithDetails = async () => {
+            try {
+              console.log(`Fetching map details for map ID: ${mapData.id}`);
+              const response = await fetchWithAuth(
+                `/maps/${mapData.id}/details`
+              );
+
+              if (response.ok) {
+                const mapDetails = await response.json();
+                console.log("Retrieved complete map details:", mapDetails);
+
+                // Enhance map data with checkpoints
+                const enhancedMapData = {
+                  ...mapData,
+                  checkpoints: mapDetails.checkpoints || [],
+                };
+
+                console.log(
+                  "Starting race with enhanced map data including checkpoints:",
+                  enhancedMapData
+                );
+
+                const partyWithMapData = {
+                  ...party,
+                  mapData: enhancedMapData,
+                };
+                onStartRace(partyWithMapData);
+              } else {
+                // If fetch fails, fall back to original data
+                console.warn(
+                  "Failed to fetch map details, using existing map data"
+                );
+                const partyWithMapData = {
+                  ...party,
+                  mapData: mapData,
+                };
+                onStartRace(partyWithMapData);
+              }
+            } catch (err) {
+              console.error(
+                "Error fetching map details before starting race:",
+                err
+              );
+              // Fall back to existing data
+              const partyWithMapData = {
+                ...party,
+                mapData: mapData,
+              };
+              onStartRace(partyWithMapData);
+            }
+          };
+
+          fetchAndStartWithDetails();
         } else {
-          // Fallback to just the party if no map data is available
-          console.log("No map data available, using party as is");
+          // Fallback to just the party
           onStartRace(party);
         }
       }
@@ -533,10 +415,7 @@ export default function RoomScreen({
   const isPartyOwner = party && userData.id === party.owner_id;
 
   return (
-    <div
-      key={forceUpdateKey}
-      className="w-screen h-screen bg-gradient-to-b from-[#1a1a3f] to-[#46628C] flex items-center justify-center relative overflow-hidden"
-    >
+    <div className="w-screen h-screen bg-gradient-to-b from-[#1a1a3f] to-[#46628C] flex items-center justify-center relative overflow-hidden">
       {/* Background Canvas for 3D Globe */}
       {/* <div className="absolute inset-0 z-0 pointer-events-none">
         <Canvas
@@ -570,13 +449,11 @@ export default function RoomScreen({
           {userData?.name && (
             <p className="text-gray-300 mb-2">Welcome, {userData.name}</p>
           )}
-          {/* Debug info temporarily (remove in production) */}
-          {/* <p className="text-gray-400 text-xs mb-1">
-            Debug - Map Title: "{mapTitle}", Map ID: {mapData?.id || "none"}
-          </p> */}
-          <p className="text-blue-300 mb-4">
-            Map: {mapTitle || getMapDisplayTitle()}
-          </p>
+          {(mapData || partyMapData) && (
+            <p className="text-blue-300 mb-4">
+              Map: {(mapData || partyMapData)?.title || "Custom Map"}
+            </p>
+          )}
 
           {!party ? (
             <div className="my-8">

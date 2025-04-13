@@ -21,26 +21,6 @@ export default function DroneShotOne({
     locationName,
   });
 
-  // Store the location name in state to ensure it doesn't get overridden
-  const [displayLocationName, setDisplayLocationName] = useState(locationName);
-
-  // Add additional debug logging for locationName
-  useEffect(() => {
-    console.log("DroneShotOne locationName value:", locationName);
-    // Ensure we're using the passed prop, not any hardcoded value
-    if (locationName !== displayLocationName) {
-      console.log("Updating displayLocationName to:", locationName);
-      setDisplayLocationName(locationName);
-    }
-
-    // Check if there are any hardcoded values overriding locationName
-    if (document.title.includes("New York")) {
-      console.warn(
-        "Possible hardcoded New York reference detected in document title"
-      );
-    }
-  }, [locationName, displayLocationName]);
-
   const mapContainerRef = useRef();
   const mapRef = useRef();
   const [loadingProgress, setLoadingProgress] = useState(0);
@@ -452,7 +432,7 @@ export default function DroneShotOne({
               Now Racing in...
             </span>
             <h2 className="text-5xl font-extrabold text-white tracking-wide leading-tight">
-              {displayLocationName}
+              {locationName}
             </h2>
             <div className="flex items-center mt-3">
               <div className="h-1 w-24 bg-gradient-to-r from-blue-500 to-blue-300 rounded-full"></div>
@@ -469,6 +449,9 @@ export default function DroneShotOne({
               className="bg-blue-600 h-full transition-all duration-300 ease-out"
               style={{ width: `${loadingProgress}%` }}
             ></div>
+          </div>
+          <div className="absolute text-white font-medium text-sm mt-8">
+            Preparing drone footage...
           </div>
         </div>
       )}
