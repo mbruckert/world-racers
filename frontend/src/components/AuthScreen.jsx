@@ -46,7 +46,7 @@ export default function AuthScreen({ onAuthenticated }) {
       }, []);
 
   return (
-    <div className="w-screen h-screen bg-gradient-to-b from-[#0f0f2e] to-[#1a1a3f] flex items-center justify-center relative overflow-hidden">
+    <div className="w-screen h-screen flex items-center justify-center relative overflow-hidden" style={{ background: `radial-gradient(circle at center,rgb(69, 120, 135) 0%,rgb(57, 91, 141) 20%, #1A1A3F 100%)`}}>
       {/* Background Canvas for 3D Globe */}
       <div className="absolute inset-0 z-0 pointer-events-none">
         <Canvas

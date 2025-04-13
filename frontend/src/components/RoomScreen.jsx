@@ -155,7 +155,7 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
   const isPartyOwner = party && userData.id === party.owner_id;
 
   return (
-    <div className="w-screen h-screen bg-gradient-to-b from-[#0f0f2e] to-[#1a1a3f] flex items-center justify-center relative overflow-hidden">
+    <div className="w-screen h-screen bg-gradient-to-b from-[#1a1a3f] to-[#46628C] flex items-center justify-center relative overflow-hidden">
       {/* Background Canvas for 3D Globe */}
       <div className="absolute inset-0 z-0 pointer-events-none">
         <Canvas
