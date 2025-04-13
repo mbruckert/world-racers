@@ -2,12 +2,12 @@ name: Deploy to Production
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Execute remote SSH commands
         uses: appleboy/ssh-action@v1
@@ -15,26 +15,27 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 20m
           script: |
             # Exit immediately if a command exits with a non-zero status
             set -e
-            
+
             # Navigate to project directory
             cd /opt/world-racers
-            
+
             # Pull latest changes
             git fetch --all
             git checkout main
             git pull origin main
-            
+
             # Create version tag with date/time
             export VERSION=$(date +'%Y%m%d%H%M%S')
             echo "Deploying version: $VERSION"
-            
+
             # Build and restart with docker compose
             docker compose -f docker-compose.yaml -f docker-compose.prod.yaml build --no-cache
             docker compose -f docker-compose.yaml -f docker-compose.prod.yaml down
             docker compose -f docker-compose.yaml -f docker-compose.prod.yaml up -d
-            
+
             # Optional: Clean up old images to save space
-            docker image prune -f 
+            docker image prune -f
