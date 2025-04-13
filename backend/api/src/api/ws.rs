@@ -48,6 +48,9 @@ pub enum WsMessage {
     Connect { user_id: i32, party_id: i32 },
     NewPartyMember { user_id: i32, name: String },
 
+    StartRace {},
+
+    RaceStarted {},
     Update { state: PlayerState },
     Disconnect { user_id: i32 },
 }
@@ -148,6 +151,9 @@ async fn handle_socket(
             let ws_message: Result<WsMessage, _> = serde_json::from_str(&text);
 
             match ws_message {
+                Ok(WsMessage::RaceStarted { .. }) => {
+                    // Ignore
+                }
                 Ok(WsMessage::NewPartyMember { .. }) => {
                     // Ignore
                 }
@@ -236,6 +242,42 @@ async fn handle_socket(
                             tracing::error!("Error sending error message");
                         }
                         break;
+                    }
+                }
+                Ok(WsMessage::StartRace { .. }) => {
+                    // Make sure user is connected to a party
+                    if user_id.is_none() || party_id.is_none() || party_tx.is_none() {
+                        continue;
+                    }
+
+                    // verifyt the usider_id is the owner of the party
+                    if let Some(pid) = party_id {
+                        let party = Party::find_by_id(pid).one(&conn).await.unwrap();
+                        let owner_id = party.unwrap().owner_id;
+                        if authenticated_user_id != owner_id {
+                            // Error message
+                            let error_msg = serde_json::to_string(&serde_json::json!({
+                                "error": "You are not the owner of this party"
+                            }))
+                            .unwrap();
+
+                            if tx.send(Message::Text(error_msg.into())).await.is_err() {
+                                tracing::error!("Error sending error message");
+                            }
+                            continue;
+                        }
+                    }
+
+                    // Broadcast race start to all members of the party
+                    if let Some(channel) = &party_tx {
+                        let race_started_msg =
+                            serde_json::to_string(&WsMessage::RaceStarted {}).unwrap();
+
+                        if let Err(e) = channel.send(race_started_msg) {
+                            tracing::error!("Error broadcasting race start message: {}", e);
+                        } else {
+                            tracing::info!("Race started in party {}", party_id.unwrap());
+                        }
                     }
                 }
                 Ok(WsMessage::Update {
@@ -397,6 +439,19 @@ async fn ws_documentation() -> impl IntoResponse {
     {
         "type": "Disconnect",
         "user_id": 42
+    }
+    
+    4. Start a race:
+    {
+        "type": "StartRace",
+        "user_id": 42,
+        "countdown": 3
+    }
+    
+    5. Race started notification (sent to all party members):
+    {
+        "type": "RaceStarted",
+        "countdown": 3
     }
     
     Authentication:
