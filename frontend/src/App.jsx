@@ -37,27 +37,6 @@ function App() {
     setError("");
   }, [demoMode]);
 
-  // Add a custom event listener for race_started as a fallback mechanism
-  useEffect(() => {
-    const handleRaceStarted = (event) => {
-      console.log("Received race_started custom event", event.detail);
-      if (party && (flowState === "room" || flowState === "preview")) {
-        console.log("Transitioning to preview based on custom event");
-        setFlowState("preview");
-        // Auto-transition to racing after a brief delay
-        setTimeout(() => {
-          console.log("Auto-transitioning to racing state");
-          setFlowState("racing");
-        }, 1000);
-      }
-    };
-
-    window.addEventListener("race_started", handleRaceStarted);
-    return () => {
-      window.removeEventListener("race_started", handleRaceStarted);
-    };
-  }, [party, flowState]);
-
   const handleAuthenticated = (authData) => {
     console.log("User authenticated:", authData);
     setFlowState("start");
@@ -118,12 +97,69 @@ function App() {
 
   const handleStartRace = (partyData) => {
     setParty(partyData);
+    console.log("handleStartRace received party data:", partyData);
+
+    // Check if this party has map data (for joiners)
+    if (partyData.mapData) {
+      console.log("Received map data with party:", partyData.mapData);
+      console.log("Setting coordinates from map data");
+
+      // Update the map data
+      setSelectedMap(partyData.mapData);
+
+      // Set start and end positions
+      const startPos = [
+        partyData.mapData.start_longitude,
+        partyData.mapData.start_latitude,
+      ];
+      const endPos = [
+        partyData.mapData.end_longitude,
+        partyData.mapData.end_latitude,
+      ];
+
+      console.log("Start position set to:", startPos);
+      console.log("End position set to:", endPos);
+
+      setStartPosition(startPos);
+      setEndPosition(endPos);
+
+      // Set checkpoints if available
+      if (
+        partyData.mapData.checkpoints &&
+        Array.isArray(partyData.mapData.checkpoints)
+      ) {
+        const formattedCheckpoints = partyData.mapData.checkpoints.map((cp) => [
+          cp.longitude,
+          cp.latitude,
+        ]);
+        console.log("Setting checkpoints:", formattedCheckpoints);
+        setCheckpoints(formattedCheckpoints);
+      } else {
+        console.log("No checkpoints in map data or invalid format");
+      }
+    } else {
+      console.log(
+        "No map data found in party data, using existing map settings"
+      );
+    }
+
     // Go to preview before racing
     setFlowState("preview");
   };
 
   const handlePreviewComplete = () => {
     // After preview completes, go to racing
+    console.log(
+      "Preview complete, transitioning to race view with party:",
+      party?.id
+    );
+    console.log("Map data going into race:", {
+      startPosition,
+      endPosition,
+      checkpoints: checkpoints.length,
+    });
+
+    // Explicitly avoid breaking the WebSocket connection during transition
     setFlowState("racing");
   };
 
@@ -166,6 +202,14 @@ function App() {
       setFlowState("preview");
     } else {
       // If a regular party, go to room screen first
+
+      // If this is a party being joined (not created), fetch the map data
+      if (partyData.isJoiner) {
+        // We need to set the selected map to the party itself temporarily
+        // The RoomScreen component will use this until proper map data is fetched
+        setSelectedMap(partyData);
+      }
+
       setFlowState("room");
     }
   };
@@ -229,6 +273,7 @@ function App() {
           mapData={selectedMap}
           onStartRace={handleStartRace}
           onCancel={handleCancelRoom}
+          party={party}
         />
       )}
 

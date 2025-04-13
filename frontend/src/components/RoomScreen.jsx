@@ -6,163 +6,24 @@ import logo from "../assets/logo.png";
 import { fetchWithAuth, getUserData, fetchUserData } from "../utils/auth";
 import multiplayerConnection from "../utils/websocket";
 
-export default function RoomScreen({ mapData, onStartRace, onCancel }) {
-  const [party, setParty] = useState(null);
+export default function RoomScreen({
+  mapData,
+  onStartRace,
+  onCancel,
+  party: initialParty,
+}) {
+  const [party, setParty] = useState(initialParty || null);
   const [members, setMembers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isCreatingParty, setIsCreatingParty] = useState(false);
   const [error, setError] = useState("");
   const [copySuccess, setCopySuccess] = useState(false);
   const [userData, setUserData] = useState(getUserData());
-  const [isConnectedToWs, setIsConnectedToWs] = useState(false);
-  const [isJoined, setIsJoined] = useState(false);
+  const [partyMapData, setPartyMapData] = useState(null);
+  const [isMapLoading, setIsMapLoading] = useState(false);
 
-  // Check if we already have a party from URL params or local storage
-  useEffect(() => {
-    const checkExistingParty = async () => {
-      // Skip if we already have a party
-      if (party || isJoined) return;
-
-      // Check URL for party ID
-      const urlParams = new URLSearchParams(window.location.search);
-      const partyCode = urlParams.get("code");
-
-      if (partyCode && userData.id) {
-        try {
-          setIsLoading(true);
-          console.log("Attempting to join party from URL parameter");
-
-          // Join the party from URL
-          const response = await fetchWithAuth(`/parties/join`, {
-            method: "POST",
-            body: JSON.stringify({
-              user_id: userData.id,
-              code: partyCode,
-            }),
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            setParty(data);
-            setIsJoined(true);
-
-            // Clear the URL parameter after joining
-            const url = new URL(window.location);
-            url.searchParams.delete("code");
-            window.history.pushState({}, "", url);
-          }
-        } catch (err) {
-          console.error("Error joining party from URL:", err);
-        } finally {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    checkExistingParty();
-  }, [userData.id, party, isJoined]);
-
-  // Set up WebSocket handlers for the room
-  useEffect(() => {
-    // Set up WebSocket race start handler
-    multiplayerConnection.onRaceStart = () => {
-      console.log("Race starting from WebSocket event!");
-      if (onStartRace && party) {
-        // Force navigation to race even for non-owners
-        console.log("Forcing race start from WebSocket event");
-
-        // Give a brief moment to ensure all clients receive the message
-        setTimeout(() => {
-          try {
-            console.log("Executing onStartRace callback with party:", party);
-            onStartRace(party);
-          } catch (error) {
-            console.error("Error in onStartRace callback:", error);
-
-            // As a last resort, dispatch a custom event
-            window.dispatchEvent(
-              new CustomEvent("race_started", {
-                detail: { timestamp: new Date().toISOString(), party },
-              })
-            );
-          }
-        }, 500);
-      }
-    };
-
-    // Also set up a listener for the custom event as a fallback
-    const handleRaceStarted = (event) => {
-      console.log("RoomScreen received race_started custom event");
-      if (onStartRace && party) {
-        try {
-          onStartRace(party);
-        } catch (error) {
-          console.error("Error in fallback race start handler:", error);
-        }
-      }
-    };
-
-    window.addEventListener("race_started", handleRaceStarted);
-
-    // Set up handler for new party members
-    multiplayerConnection.onNewPartyMember = (data) => {
-      console.log("New party member joined:", data);
-      // Update the members list immediately instead of waiting for polling
-      setMembers((prevMembers) => {
-        // Check if member is already in the list
-        if (!prevMembers.some((member) => member.id === data.user_id)) {
-          return [
-            ...prevMembers,
-            {
-              id: data.user_id,
-              name: data.name,
-              is_owner: false, // Assume not owner since they're joining
-            },
-          ];
-        }
-        return prevMembers;
-      });
-    };
-
-    // Clean up handler on unmount
-    return () => {
-      multiplayerConnection.onRaceStart = null;
-      multiplayerConnection.onNewPartyMember = null;
-      window.removeEventListener("race_started", handleRaceStarted);
-    };
-  }, [onStartRace, party]);
-
-  // Connect to WebSocket when we have a party
-  useEffect(() => {
-    if (!party || !userData.id || isConnectedToWs) return;
-
-    console.log("Connecting to WebSocket in RoomScreen with:", {
-      userId: userData.id,
-      partyId: party.id,
-      partyObject: party,
-    });
-
-    // Connect to WebSocket for real-time updates
-    multiplayerConnection.connect(userData.id, party.id);
-    setIsConnectedToWs(true);
-
-    // Set initial party members
-    if (members.length > 0) {
-      members.forEach((member) => {
-        multiplayerConnection.partyMembers.set(member.id, member.name);
-      });
-    }
-
-    // Add current user to party members if not already there
-    if (userData.id && userData.name) {
-      multiplayerConnection.partyMembers.set(userData.id, userData.name);
-    }
-
-    return () => {
-      // Don't disconnect here - we want to maintain the connection for the race
-      // It will be cleaned up when the user leaves the race or the app
-    };
-  }, [party, userData.id, isConnectedToWs, members]);
+  // Check if the user is a joiner (not the owner)
+  const isJoiner = party && party.isJoiner === true;
 
   // Fetch user data if not available
   useEffect(() => {
@@ -179,29 +40,88 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
     }
   }, [userData.id]);
 
+  // Fetch map data for the party
+  useEffect(() => {
+    // Log the current state to debug why fetching might not happen
+    console.log("Map fetch condition check:", {
+      hasParty: !!party,
+      partyMapId: party?.map_id,
+      hasPartyMapData: !!partyMapData,
+      isLoading: isMapLoading,
+      shouldFetch: !!(party && party.map_id && !partyMapData && !isMapLoading),
+    });
+
+    // Only fetch if we have a party with map_id but no map data yet
+    if (party && party.map_id && !partyMapData && !isMapLoading) {
+      const fetchMapDetails = async () => {
+        try {
+          setIsMapLoading(true);
+          console.log(
+            `Fetching map details for party ${party.id}, map ID: ${party.map_id}`
+          );
+
+          // Using the endpoint you provided
+          const response = await fetchWithAuth(`/maps/${party.map_id}/details`);
+
+          if (!response.ok) {
+            throw new Error(`Failed to fetch map details (${response.status})`);
+          }
+
+          const mapDetails = await response.json();
+          console.log("Retrieved map details:", mapDetails);
+
+          // Extract the map and checkpoints
+          const mapInfo = mapDetails.map;
+          const checkpoints = mapDetails.checkpoints || [];
+
+          // Enhance the map data with checkpoints
+          const enhancedMapData = {
+            ...mapInfo,
+            checkpoints: checkpoints,
+          };
+
+          // Store the enhanced map data
+          setPartyMapData(enhancedMapData);
+
+          console.log(
+            "Map data with checkpoints ready for when race starts:",
+            enhancedMapData
+          );
+        } catch (err) {
+          console.error("Error fetching map details:", err);
+          setError(`Failed to load map details: ${err.message}`);
+        } finally {
+          setIsMapLoading(false);
+        }
+      };
+
+      fetchMapDetails();
+    }
+  }, [party, mapData, partyMapData, isMapLoading]);
+
   // Only set up polling for members when we have a party
   useEffect(() => {
-    if (!party || !isJoined) return;
+    if (!party) return;
 
-    let isMounted = true;
     const fetchMembers = async () => {
       try {
-        // Skip if component is unmounting or no longer mounted
-        if (!isMounted) return;
-
         const response = await fetchWithAuth(`/parties/${party.id}/members`);
         if (response.ok) {
           const data = await response.json();
-          if (isMounted) {
-            setMembers(data);
+          setMembers(data);
 
-            // Update the party members in the WebSocket connection too
-            if (isConnectedToWs) {
-              data.forEach((member) => {
-                multiplayerConnection.partyMembers.set(member.id, member.name);
-              });
-            }
-          }
+          // Update the multiplayerConnection party members map
+          data.forEach((member) => {
+            multiplayerConnection.partyMembers.set(
+              parseInt(member.id),
+              member.name
+            );
+          });
+
+          console.log(
+            "Updated party members in multiplayerConnection:",
+            Array.from(multiplayerConnection.partyMembers.entries())
+          );
         }
       } catch (err) {
         console.error("Error fetching party members:", err);
@@ -211,56 +131,83 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
     // Initial fetch
     fetchMembers();
 
-    // Set up polling interval - use a reasonable interval (10 seconds)
-    const interval = setInterval(fetchMembers, 10000);
+    // Set up polling interval
+    const interval = setInterval(fetchMembers, 5000);
 
     // Clean up interval on unmount
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
-  }, [party, isJoined, isConnectedToWs]);
+    return () => clearInterval(interval);
+  }, [party]);
 
-  // Start the race
-  const handleStartRace = () => {
-    if (onStartRace && party) {
-      // Send race start message to all connected players
-      if (multiplayerConnection.isConnected) {
-        console.log("Sending StartRace WebSocket message");
+  // Set up WebSocket listener for RaceStarted event when party exists
+  useEffect(() => {
+    if (!party) return;
 
-        // Make sure the connection is truly established
-        if (
-          multiplayerConnection.ws &&
-          multiplayerConnection.ws.readyState === WebSocket.OPEN
-        ) {
-          // Send the start race message
-          multiplayerConnection.startRace();
+    // Define the handler for when a race starts
+    const handleRaceStart = () => {
+      console.log("🏁 Race start detected via WebSocket!");
+      console.log(`Party ID: ${party.id}, User ID: ${userData.id}`);
+      console.log("Transitioning to race view...");
 
-          console.log("StartRace message sent successfully");
-
-          // Give the message a moment to propagate before navigating
-          setTimeout(() => {
-            console.log("Starting race after WebSocket message sent");
-            onStartRace(party);
-          }, 800); // Longer timeout to ensure message propagation
+      if (onStartRace) {
+        // Include map data regardless of user role
+        if (partyMapData) {
+          // First priority: use fetched map data if available
+          const partyWithMapData = {
+            ...party,
+            mapData: partyMapData,
+          };
+          console.log("Joining race with fetched map data:", partyMapData);
+          console.log("Start coordinates:", [
+            partyMapData.start_longitude,
+            partyMapData.start_latitude,
+          ]);
+          console.log("End coordinates:", [
+            partyMapData.end_longitude,
+            partyMapData.end_latitude,
+          ]);
+          console.log("Checkpoints:", partyMapData.checkpoints);
+          onStartRace(partyWithMapData);
+        } else if (mapData) {
+          // Second priority: use the map data passed to this component
+          const partyWithMapData = {
+            ...party,
+            mapData: mapData,
+          };
+          console.log("Joining race with component map data:", mapData);
+          onStartRace(partyWithMapData);
         } else {
-          console.warn(
-            "WebSocket not in OPEN state, starting race without websocket"
-          );
+          // Fallback to just the party
+          console.log("No map data available, using party as is");
           onStartRace(party);
         }
-      } else {
-        console.warn(
-          "WebSocket not connected, starting race without multiplayer sync"
-        );
-        onStartRace(party);
       }
-    } else if (!party) {
-      setError("Please create a party first");
-    }
-  };
+    };
 
-  // Create a party
+    // Register the onRaceStart handler with the multiplayer connection
+    multiplayerConnection.onRaceStart = handleRaceStart;
+    console.log("Registered WebSocket listener for RaceStarted event");
+
+    // Clean up when component unmounts
+    return () => {
+      multiplayerConnection.onRaceStart = null;
+    };
+  }, [party, onStartRace, userData.id, partyMapData, isJoiner]);
+
+  // Update party if initialParty changes
+  useEffect(() => {
+    if (initialParty) {
+      setParty(initialParty);
+
+      // If joining a party (not creating), ensure WebSocket connection is established
+      if (initialParty.isJoiner && userData.id) {
+        // Connect to the party via WebSocket if not already connected
+        multiplayerConnection.connect(userData.id, initialParty.id);
+        console.log(`Connected to party ${initialParty.id} as joiner`);
+      }
+    }
+  }, [initialParty, userData.id]);
+
+  // Create a new party
   const createParty = async () => {
     if (party) return; // Don't create if we already have a party
 
@@ -281,6 +228,7 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
         body: JSON.stringify({
           name: partyName,
           owner_id: userId,
+          map_id: mapData.id,
         }),
       });
 
@@ -289,8 +237,12 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
       }
 
       const data = await response.json();
+
+      // Connect to the websocket with the user ID and new party ID
+      multiplayerConnection.connect(userId, data.id);
+      console.log(`Connected to party ${data.id} as creator`);
+
       setParty(data);
-      setIsJoined(true);
     } catch (err) {
       setError(err.message || "Failed to create party. Please try again.");
     } finally {
@@ -311,6 +263,65 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
       .catch(() => {
         setError("Failed to copy code");
       });
+  };
+
+  // Start the race
+  const handleStartRace = () => {
+    if (party) {
+      console.log("Starting race for party:", party.id);
+
+      // Verify connection status before sending
+      if (multiplayerConnection.isConnected) {
+        console.log("WebSocket is connected, sending StartRace message");
+
+        // Send WebSocket message to start the race
+        multiplayerConnection.startRace();
+
+        console.log("StartRace message sent");
+      } else {
+        console.warn("WebSocket not connected, attempting to connect first");
+        multiplayerConnection.connect(userData.id, party.id);
+
+        // Add a small delay to ensure connection is established
+        setTimeout(() => {
+          if (multiplayerConnection.isConnected) {
+            console.log("WebSocket now connected, sending StartRace message");
+            multiplayerConnection.startRace();
+          } else {
+            console.error("Failed to establish WebSocket connection");
+            setError("Connection issue. Please try again.");
+          }
+        }, 1000);
+      }
+
+      // Also call the onStartRace callback
+      if (onStartRace) {
+        console.log("Calling onStartRace callback");
+        // Include map data for both creator and joiner
+        if (mapData) {
+          // If we're the creator, include the mapData that was passed to this component
+          const partyWithMapData = {
+            ...party,
+            mapData: mapData,
+          };
+          console.log("Starting race with map data:", mapData);
+          onStartRace(partyWithMapData);
+        } else if (partyMapData) {
+          // If we have fetched map data, include it
+          const partyWithMapData = {
+            ...party,
+            mapData: partyMapData,
+          };
+          console.log("Starting race with fetched map data:", partyMapData);
+          onStartRace(partyWithMapData);
+        } else {
+          // Fallback to just the party
+          onStartRace(party);
+        }
+      }
+    } else {
+      setError("Please create a party first");
+    }
   };
 
   // Disband the party and cancel
@@ -352,9 +363,9 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
   const isPartyOwner = party && userData.id === party.owner_id;
 
   return (
-    <div className="w-screen h-screen bg-gradient-to-b from-[#0f0f2e] to-[#1a1a3f] flex items-center justify-center relative overflow-hidden">
+    <div className="w-screen h-screen bg-gradient-to-b from-[#1a1a3f] to-[#46628C] flex items-center justify-center relative overflow-hidden">
       {/* Background Canvas for 3D Globe */}
-      <div className="absolute inset-0 z-0 pointer-events-none">
+      {/* <div className="absolute inset-0 z-0 pointer-events-none">
         <Canvas
           className="w-full h-full"
           camera={{ position: [0, 0, 4], fov: 35 }}
@@ -365,7 +376,7 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
           <OrbitControls enableZoom={false} enablePan={false} autoRotate />
           <Environment preset="sunset" />
         </Canvas>
-      </div>
+      </div> */}
 
       {/* Main UI content */}
       <div className="z-10 text-center p-6 bg-black bg-opacity-50 rounded-2xl backdrop-blur-md max-w-xl w-full">
@@ -386,13 +397,13 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
           {userData?.name && (
             <p className="text-gray-300 mb-2">Welcome, {userData.name}</p>
           )}
-          {mapData && (
+          {(mapData || partyMapData) && (
             <p className="text-blue-300 mb-4">
-              Map: {mapData.title || "Custom Map"}
+              Map: {(mapData || partyMapData)?.title || "Custom Map"}
             </p>
           )}
 
-          {!isJoined ? (
+          {!party ? (
             <div className="my-8">
               <p className="text-white mb-4">
                 Create a party to invite friends to your race!
@@ -437,7 +448,7 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
               </p>
               <div className="flex items-center justify-center gap-2 mb-4">
                 <div className="bg-gray-800 px-6 py-3 rounded-lg text-white text-3xl font-mono tracking-wider">
-                  {party?.code}
+                  {party.code}
                 </div>
                 <button
                   onClick={copyCodeToClipboard}
@@ -511,17 +522,30 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
         )}
 
         <div className="flex gap-4 justify-center">
-          <button
-            onClick={handleDisband}
-            className={`px-6 py-3 ${
-              isLoading ? "bg-gray-600" : "bg-red-600 hover:bg-red-700"
-            } text-white font-semibold rounded-xl shadow-lg transition`}
-            disabled={isLoading}
-          >
-            {isLoading ? "Processing..." : party ? "Disband Party" : "Cancel"}
-          </button>
+          {/* Only show disband/cancel button if not a joiner or if there's no party yet */}
+          {(!isJoiner || !party) && (
+            <button
+              onClick={handleDisband}
+              className={`px-6 py-3 ${
+                isLoading ? "bg-gray-600" : "bg-red-600 hover:bg-red-700"
+              } text-white font-semibold rounded-xl shadow-lg transition`}
+              disabled={isLoading}
+            >
+              {isLoading ? "Processing..." : party ? "Disband Party" : "Cancel"}
+            </button>
+          )}
 
-          {party && (isPartyOwner || !party.owner_id) && (
+          {/* Only show leave button for joiners */}
+          {isJoiner && party && (
+            <button
+              onClick={onCancel}
+              className="px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-xl shadow-lg transition"
+            >
+              Leave Party
+            </button>
+          )}
+
+          {party && (isPartyOwner || !party.owner_id) && !isJoiner && (
             <button
               onClick={handleStartRace}
               className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl shadow-lg transition flex items-center gap-2"

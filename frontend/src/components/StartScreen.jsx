@@ -43,12 +43,12 @@ export default function StartScreen({
 
       const joinedPartyData = await response.json();
 
-      //Establish web socket connection, don't do anything else just establish
       multiplayerConnection.connect(userData.id, joinedPartyData.id);
 
-      // The connect method automatically sends a Connect message
+      // Add isJoiner flag to party data
+      joinedPartyData.isJoiner = true;
 
-      // Call the handler with the joined party data
+      // Call the handleJoinGame function with the joined party data
       if (handleJoinGame) {
         handleJoinGame(joinedPartyData);
       }
@@ -156,7 +156,7 @@ export default function StartScreen({
       }}
     >
       {/* Background Canvas for 3D Globe */}
-      <div className="absolute inset-0 z-0 pointer-events-none">
+      {/* <div className="absolute inset-0 z-0 pointer-events-none">
         <Canvas
           className="w-full h-full"
           camera={{ position: [0, 0, 4], fov: 35 }}
@@ -177,7 +177,7 @@ export default function StartScreen({
           background-color="transparent"
           className="absolute inset-0 z-[-1] pointer-events-none"
         ></night-sky>
-      </div>
+      </div> */}
 
       {/* Main UI content */}
       <div className="z-10 text-center">
