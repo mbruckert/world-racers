@@ -26,7 +26,7 @@ async function setupUser() {
     // Create a party
     const partyResponse = await axios.post(
       `${API_URL}/parties`, 
-      { name: PARTY_NAME, owner_id: userId },
+      { name: PARTY_NAME },
       { headers: { Authorization: `Bearer ${token}` } }
     );
     
