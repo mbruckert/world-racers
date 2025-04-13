@@ -3,15 +3,14 @@ import "./App.css";
 import MapBuilder from "./components/MapBuilder";
 import DroneShotOne from "./components/DroneShots/DroneShotOne";
 import RaceView from "./components/RaceView";
+import StartScreen from "./components/StartScreen";
 
 function App() {
   const [startPosition, setStartPosition] = useState(null);
   const [endPosition, setEndPosition] = useState(null);
   const [checkpoints, setCheckpoints] = useState([]);
   const [locationName, setLocationName] = useState("");
-  const [timeOfDay, setTimeOfDay] = useState("day");
-  const [weather, setWeather] = useState("clear");
-  const [flowState, setFlowState] = useState("building"); // building, preview, racing
+  const [flowState, setFlowState] = useState("start"); // building, preview, racing
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -68,6 +67,8 @@ function App() {
           {error}
         </div>
       )}
+
+      {flowState == "start" && <StartScreen />}
 
       {flowState === "building" && (
         <MapBuilder onRouteSubmit={handleRouteSubmit} />
