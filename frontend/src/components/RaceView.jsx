@@ -1362,36 +1362,32 @@ export default function RaceView({
       ArrowDown: "backward",
       ArrowLeft: "left",
       ArrowRight: "right",
-      w: "forward",
-      s: "backward",
-      a: "left",
-      d: "right",
-      W: "forward",
-      S: "backward",
-      A: "left",
-      D: "right",
+      KeyW: "forward",
+      KeyS: "backward",
+      KeyA: "left",
+      KeyD: "right"
     };
 
     const handleKeyDown = (e) => {
-      const control = keyMap[e.key];
+      const control = keyMap[e.code];
       if (control) {
         e.preventDefault();
         carPhysics.current.setControl(control, true);
         setDebugInfo((prev) => {
           const newActiveKeys = [...prev.activeKeys];
-          if (!newActiveKeys.includes(e.key)) newActiveKeys.push(e.key);
+          if (!newActiveKeys.includes(e.code)) newActiveKeys.push(e.code);
           return { ...prev, activeKeys: newActiveKeys };
         });
       }
     };
 
     const handleKeyUp = (e) => {
-      const control = keyMap[e.key];
+      const control = keyMap[e.code];
       if (control) {
         e.preventDefault();
         carPhysics.current.setControl(control, false);
         setDebugInfo((prev) => {
-          const newActiveKeys = prev.activeKeys.filter((k) => k !== e.key);
+          const newActiveKeys = prev.activeKeys.filter((k) => k !== e.code);
           return { ...prev, activeKeys: newActiveKeys };
         });
       }
@@ -1424,81 +1420,16 @@ export default function RaceView({
     let lastCompassUpdateTime = 0;
 
     const gameLoop = (timestamp) => {
-      const state = carPhysics.current;
-
-      const deltaTime = state.lastFrame ? timestamp - state.lastFrame : 16.67;
-      state.lastFrame = timestamp;
-      const dt = Math.min(deltaTime, 100) / 1000;
-
       // Track frame times for FPS calculation
+      const deltaTime = carPhysics.current.lastFrame ? timestamp - carPhysics.current.lastFrame : 16.67;
       frameTimesRef.current.push(deltaTime);
+      
       // Keep only the last 20 frames for averaging
       if (frameTimesRef.current.length > 20) {
         frameTimesRef.current.shift();
       }
 
-      // Key hold durations
-      if (state.controls.forward) state.keyHoldDuration.forward += dt;
-      else state.keyHoldDuration.forward = 0;
-
-      if (state.controls.backward) state.keyHoldDuration.backward += dt;
-      else state.keyHoldDuration.backward = 0;
-
-      // Forward impulse
-      if (state.controls.forward) {
-        if (!state.prevControls.forward) {
-          state.forwardImpulse = 0.1;
-        } else if (state.keyHoldDuration.forward > 0.1) {
-          state.forwardImpulse = Math.min(1.0, state.forwardImpulse + dt * 1.5);
-        }
-      } else {
-        state.forwardImpulse *= 0.7;
-      }
-
-      // Backward impulse
-      if (state.controls.backward) {
-        if (!state.prevControls.backward) {
-          state.backwardImpulse = 0.3;
-        } else if (state.keyHoldDuration.backward > 0.1) {
-          state.backwardImpulse = Math.min(
-            1.0,
-            state.backwardImpulse + dt * 1.5
-          );
-        }
-      } else {
-        state.backwardImpulse *= 0.7;
-      }
-
-      if (state.forwardImpulse < 0.01) state.forwardImpulse = 0;
-      if (state.backwardImpulse < 0.01) state.backwardImpulse = 0;
-
-      // Make a copy of the controls to compare in next frame
-      state.prevControls = { ...state.controls };
-
-      // Steering
-      const maxSteeringAngle = 1.2; // ~69 degrees
-      const steeringSpeed = 3.0 * dt;
-      const returnSpeed = 2.0 * dt;
-
-      if (state.controls.left) {
-        state.steeringAngle = Math.max(
-          state.steeringAngle - steeringSpeed,
-          -maxSteeringAngle
-        );
-      } else if (state.controls.right) {
-        state.steeringAngle = Math.min(
-          state.steeringAngle + steeringSpeed,
-          maxSteeringAngle
-        );
-      } else {
-        if (state.steeringAngle > 0) {
-          state.steeringAngle = Math.max(0, state.steeringAngle - returnSpeed);
-        } else if (state.steeringAngle < 0) {
-          state.steeringAngle = Math.min(0, state.steeringAngle + returnSpeed);
-        }
-      }
-
-      // Calculate average FPS every 10 frames
+      // Calculate average FPS about 10 times per second
       if (timestamp % 100 < 16) {
         const avgFrameTime =
           frameTimesRef.current.reduce((acc, time) => acc + time, 0) /
@@ -1507,7 +1438,7 @@ export default function RaceView({
         setFps(calculatedFps);
       }
 
-      // Update car physics
+      // Update car physics - define offTrack callback
       const handleOffTrack = () => {
         if (!offTrackWarning) {
           setOffTrackWarning(true);
@@ -1516,6 +1447,7 @@ export default function RaceView({
       };
 
       // Update physics and get new state
+      const dt = Math.min(deltaTime, 100) / 1000;
       const carState = carPhysics.current.update(
         dt,
         routeCoordinates,
