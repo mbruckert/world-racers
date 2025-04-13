@@ -325,7 +325,7 @@ export default function MapBuilderExtended({ onRouteSubmit }) {
       <div className="flex w-full max-w-6xl gap-4">
         <div className="flex-1">
           {/* Map */}
-          <div className="w-full h-[450px] rounded-xl overflow-hidden shadow-lg border border-gray-300 mb-4">
+          <div className="w-full h-[400px] rounded-xl overflow-hidden shadow-lg border border-gray-300 mb-4">
             <div id="map" className="w-full h-full" />
           </div>
 
@@ -342,9 +342,9 @@ export default function MapBuilderExtended({ onRouteSubmit }) {
               Map Details
             </h3>
 
-            {userData?.name && (
+            {/* {userData?.name && (
               <p className="text-gray-300 mb-4">Creator: {userData.name}</p>
-            )}
+            )} */}
 
             <div className="mb-4">
               <label className="block text-gray-300 mb-2">Title</label>
@@ -383,7 +383,10 @@ export default function MapBuilderExtended({ onRouteSubmit }) {
                 onClick={() => (modeRef.current = "start")}
                 className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition flex items-center gap-2"
               >
-                <div className="h-3 w-3 rounded-full bg-white"></div>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-6">
+                  <path fillRule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 0 0 .723 0l.028-.015.071-.041a16.975 16.975 0 0 0 1.144-.742 19.58 19.58 0 0 0 2.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 0 0-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 0 0 2.682 2.282 16.975 16.975 0 0 0 1.145.742ZM12 13.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clipRule="evenodd" />
+                </svg>
+
                 Set Start Point
               </button>
 
@@ -391,7 +394,9 @@ export default function MapBuilderExtended({ onRouteSubmit }) {
                 onClick={() => (modeRef.current = "end")}
                 className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition flex items-center gap-2"
               >
-                <div className="h-3 w-3 rounded-full bg-white"></div>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-6">
+                  <path fillRule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 0 0 .723 0l.028-.015.071-.041a16.975 16.975 0 0 0 1.144-.742 19.58 19.58 0 0 0 2.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 0 0-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 0 0 2.682 2.282 16.975 16.975 0 0 0 1.145.742ZM12 13.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clipRule="evenodd" />
+                </svg>
                 Set End Point
               </button>
 
@@ -399,7 +404,10 @@ export default function MapBuilderExtended({ onRouteSubmit }) {
                 onClick={() => (modeRef.current = "checkpoint")}
                 className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition flex items-center gap-2"
               >
-                <div className="h-3 w-3 rounded-full bg-white"></div>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-6">
+                  <path fillRule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 0 0 .723 0l.028-.015.071-.041a16.975 16.975 0 0 0 1.144-.742 19.58 19.58 0 0 0 2.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 0 0-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 0 0 2.682 2.282 16.975 16.975 0 0 0 1.145.742ZM12 13.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clipRule="evenodd" />
+                </svg>
+
                 Add Checkpoint
               </button>
 
@@ -454,7 +462,7 @@ export default function MapBuilderExtended({ onRouteSubmit }) {
           </div>
 
           {/* Create Race Button */}
-          <div className="mt-auto">
+          <div className="mt-3">
             <button
               onClick={handleSubmit}
               disabled={isSaving || !userData.id}
