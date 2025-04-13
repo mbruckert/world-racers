@@ -1,10 +1,10 @@
+use auth::middleware::AuthUser;
 use axum::{
     Router,
     extract::{Json, Path, State},
     http::StatusCode,
     routing::{get, post},
 };
-use auth::middleware::AuthUser;
 use entity::party::{self, Entity as Party};
 use entity::user::{self, Entity as User};
 use entity::user_party::{self, Entity as UserParty};
@@ -20,7 +20,6 @@ use crate::db::AppState;
 #[derive(Deserialize, ToSchema)]
 pub struct CreatePartyRequest {
     name: String,
-    owner_id: i32,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -53,16 +52,6 @@ pub struct JoinPartyRequest {
 #[derive(Deserialize, ToSchema)]
 pub struct UpdatePartyRequest {
     name: Option<String>,
-}
-
-#[derive(Deserialize, ToSchema)]
-pub struct LeavePartyRequest {
-    // No longer need user_id as it will come from the auth token
-}
-
-#[derive(Deserialize, ToSchema)]
-pub struct DisbandPartyRequest {
-    owner_id: i32,
 }
 
 pub fn router() -> Router<AppState> {
@@ -189,6 +178,7 @@ fn generate_party_code() -> String {
 }
 
 /// Create a new party
+#[axum::debug_handler]
 #[utoipa::path(
     post,
     path = "/api/parties",
@@ -198,22 +188,26 @@ fn generate_party_code() -> String {
         (status = 200, description = "Party created successfully", body = PartyResponse),
         (status = 400, description = "Invalid request", body = String),
         (status = 500, description = "Internal server error", body = String)
+    ),
+    security(
+        ("jwt" = [])
     )
 )]
 pub async fn create_party(
     State(state): State<AppState>,
+    auth_user: AuthUser,
     Json(payload): Json<CreatePartyRequest>,
 ) -> Result<Json<PartyResponse>, (StatusCode, String)> {
     let db = &state.conn;
 
     // Verify owner exists
-    let _owner = User::find_by_id(payload.owner_id)
+    let _owner = User::find_by_id(auth_user.0.sub)
         .one(db)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .ok_or((
             StatusCode::BAD_REQUEST,
-            format!("User with id {} not found", payload.owner_id),
+            format!("User with id {} not found", auth_user.0.sub),
         ))?;
 
     // Generate a unique party code
@@ -229,7 +223,7 @@ pub async fn create_party(
     let new_party = party::ActiveModel {
         name: Set(payload.name),
         code: Set(code),
-        owner_id: Set(payload.owner_id),
+        owner_id: Set(auth_user.0.sub),
         ..Default::default()
     };
 
@@ -240,7 +234,7 @@ pub async fn create_party(
 
     // Add owner as a party member
     let new_user_party = user_party::ActiveModel {
-        user_id: Set(payload.owner_id),
+        user_id: Set(auth_user.0.sub),
         party_id: Set(party.id),
         ..Default::default()
     };
@@ -373,6 +367,7 @@ pub async fn update_party(
 }
 
 /// Leave a party
+#[axum::debug_handler]
 #[utoipa::path(
     post,
     path = "/api/parties/{party_id}/leave",
@@ -395,12 +390,11 @@ pub async fn leave_party(
     State(state): State<AppState>,
     Path(party_id): Path<i32>,
     auth_user: AuthUser,
-    _: Json<LeavePartyRequest>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     let db = &state.conn;
     // Get the user ID from the auth token
-    let user_id = auth_user.0.sub as i32; // Assuming sub is already an i32-compatible value
-    
+    let user_id = auth_user.0.sub; // Assuming sub is already an i32-compatible value
+
     // Verify the party exists
     let party = Party::find_by_id(party_id)
         .one(db)
@@ -443,6 +437,7 @@ pub async fn leave_party(
 }
 
 /// Disband a party (only by owner)
+#[axum::debug_handler]
 #[utoipa::path(
     post,
     path = "/api/parties/{id}/disband",
@@ -450,7 +445,6 @@ pub async fn leave_party(
     params(
         ("id" = i32, Path, description = "Party ID")
     ),
-    request_body = DisbandPartyRequest,
     responses(
         (status = 204, description = "Party disbanded successfully"),
         (status = 403, description = "Only the party owner can disband it", body = String),
@@ -461,7 +455,7 @@ pub async fn leave_party(
 pub async fn disband_party(
     State(state): State<AppState>,
     Path(id): Path<i32>,
-    Json(payload): Json<DisbandPartyRequest>,
+    auth_user: AuthUser,
 ) -> Result<StatusCode, (StatusCode, String)> {
     let db = &state.conn;
 
@@ -476,7 +470,7 @@ pub async fn disband_party(
         ))?;
 
     // Verify the user is the owner
-    if party.owner_id != payload.owner_id {
+    if party.owner_id != auth_user.0.sub {
         return Err((
             StatusCode::FORBIDDEN,
             "Only the party owner can disband the party".to_string(),

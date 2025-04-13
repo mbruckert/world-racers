@@ -38,6 +38,9 @@ services:
       - DATABASE_URL=${DOCKER_DATABASE_URL}
       - SERVER_HOST=${SERVER_HOST}
       - SERVER_PORT=${SERVER_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRY=${JWT_EXPIRY}
+      - REFRESH_EXPIRY=${REFRESH_EXPIRY}
     networks:
       - web
     labels:
@@ -52,7 +55,7 @@ services:
       dockerfile: Dockerfile
       args:
         - VITE_MAPBOX_API_KEY=${VITE_MAPBOX_API_KEY}
-        - VITE_API_URL=http://${DOMAIN}/api
+        - VITE_API_URL=http://${DOMAIN}:39387
     networks:
       - web
     labels:

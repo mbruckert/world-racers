@@ -1,5 +1,8 @@
 use axum::Router;
-use utoipa::OpenApi;
+use utoipa::{
+    Modify, OpenApi,
+    openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
+};
 use utoipa_swagger_ui::SwaggerUi;
 
 use super::{auth, health, maps, parties, users};
@@ -53,8 +56,9 @@ use crate::db::AppState;
             auth::AuthResponse,
             auth::RegisterRequest,
             auth::RefreshRequest
-        )
+        ),
     ),
+    modifiers(&SecurityAddon),
     tags(
         (name = "health", description = "Health check endpoints"),
         (name = "users", description = "User management endpoints"),
@@ -74,4 +78,22 @@ pub fn swagger_ui() -> Router<AppState> {
     let api_doc = ApiDoc::openapi();
 
     Router::new().merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", api_doc))
+}
+
+struct SecurityAddon;
+
+impl Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        if let Some(components) = openapi.components.as_mut() {
+            components.add_security_scheme(
+                "jwt",
+                SecurityScheme::Http(
+                    HttpBuilder::new()
+                        .scheme(HttpAuthScheme::Bearer)
+                        .bearer_format("JWT")
+                        .build(),
+                ),
+            )
+        }
+    }
 }

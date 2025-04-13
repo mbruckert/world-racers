@@ -54,6 +54,7 @@ pub enum AuthError {
     InternalError(String),
 }
 
+#[derive(Debug, Clone)]
 pub struct Auth {
     jwt_secret: String,
     jwt_expiry: i64,     // in seconds
