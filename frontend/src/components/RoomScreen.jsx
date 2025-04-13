@@ -4,6 +4,7 @@ import { OrbitControls, Environment } from "@react-three/drei";
 import GlobeModel from "./GlobeModel";
 import logo from "../assets/logo.png";
 import { fetchWithAuth, getUserData, fetchUserData } from "../utils/auth";
+import multiplayerConnection from "../utils/websocket";
 
 export default function RoomScreen({ mapData, onStartRace, onCancel }) {
   const [party, setParty] = useState(null);
@@ -13,6 +14,37 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
   const [error, setError] = useState("");
   const [copySuccess, setCopySuccess] = useState(false);
   const [userData, setUserData] = useState(getUserData());
+  const [isConnectedToWs, setIsConnectedToWs] = useState(false);
+
+  // Set up WebSocket handlers for the room
+  useEffect(() => {
+    // Set up WebSocket race start handler
+    multiplayerConnection.onRaceStart = (mapData) => {
+      console.log("Race starting from WebSocket event!");
+      if (onStartRace && party) {
+        onStartRace(party);
+      }
+    };
+
+    // Clean up handler on unmount
+    return () => {
+      multiplayerConnection.onRaceStart = null;
+    };
+  }, [onStartRace, party]);
+
+  // Connect to WebSocket when we have a party
+  useEffect(() => {
+    if (!party || !userData.id || isConnectedToWs) return;
+
+    // Connect to WebSocket for real-time updates
+    multiplayerConnection.connect(userData.id, party.id);
+    setIsConnectedToWs(true);
+
+    return () => {
+      // Don't disconnect here - we want to maintain the connection for the race
+      // It will be cleaned up when the user leaves the race or the app
+    };
+  }, [party, userData.id, isConnectedToWs]);
 
   // Fetch user data if not available
   useEffect(() => {
@@ -39,6 +71,11 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
         if (response.ok) {
           const data = await response.json();
           setMembers(data);
+
+          // Update the party members in the WebSocket connection too
+          data.forEach((member) => {
+            multiplayerConnection.partyMembers.set(member.id, member.name);
+          });
         }
       } catch (err) {
         console.error("Error fetching party members:", err);
@@ -110,6 +147,12 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
   // Start the race
   const handleStartRace = () => {
     if (onStartRace && party) {
+      // Send race start message to all connected players
+      if (multiplayerConnection.isConnected) {
+        multiplayerConnection.startRace(mapData);
+      }
+
+      // Make sure we're passing the complete party object
       onStartRace(party);
     } else if (!party) {
       setError("Please create a party first");

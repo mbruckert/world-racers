@@ -6,6 +6,7 @@ import logo from "../assets/logo.png";
 import { useEffect } from "react";
 
 import { fetchWithAuth, getUserData } from "../utils/auth";
+import multiplayerConnection from "../utils/websocket";
 
 export default function StartScreen({
   handleBypass,
@@ -16,6 +17,13 @@ export default function StartScreen({
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState("");
   const [userData] = useState(getUserData());
+
+  // Disconnect from any existing WebSocket connection when returning to start screen
+  useEffect(() => {
+    if (multiplayerConnection.isConnected) {
+      multiplayerConnection.disconnect();
+    }
+  }, []);
 
   const handleJoinClick = async () => {
     if (!partyCode.trim()) {
@@ -41,6 +49,7 @@ export default function StartScreen({
       }
 
       const joinedPartyData = await response.json();
+      console.log("Successfully joined party:", joinedPartyData);
 
       // Call the handler with the joined party data
       if (handleJoinGame) {

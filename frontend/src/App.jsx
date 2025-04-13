@@ -10,6 +10,7 @@ import MapSelectScreen from "./components/MapSelectScreen";
 import RoomScreen from "./components/RoomScreen";
 import JoinPartyScreen from "./components/JoinPartyScreen";
 import { isAuthenticated, getAuthData, fetchWithAuth } from "./utils/auth";
+import multiplayerConnection from "./utils/websocket";
 
 function App() {
   const [startPosition, setStartPosition] = useState(null);
@@ -36,6 +37,40 @@ function App() {
     // Reset error when component mounts or flow state changes
     setError("");
   }, [demoMode]);
+
+  // Handle race start WebSocket event
+  useEffect(() => {
+    // Setup race start handler to sync the race starting across clients
+    multiplayerConnection.onRaceStart = (mapData) => {
+      console.log("Race start event received in App", mapData);
+
+      if (mapData) {
+        // Set up route data from received map data
+        setStartPosition([mapData.start_longitude, mapData.start_latitude]);
+        setEndPosition([mapData.end_longitude, mapData.end_latitude]);
+
+        if (mapData.checkpoints && Array.isArray(mapData.checkpoints)) {
+          const formattedCheckpoints = mapData.checkpoints.map((cp) => [
+            cp.longitude,
+            cp.latitude,
+          ]);
+          setCheckpoints(formattedCheckpoints);
+        }
+
+        setLocationName(mapData.title || "");
+      }
+
+      // Go straight to race view - skip the preview for non-host players
+      if (flowState !== "racing") {
+        setFlowState("racing");
+      }
+    };
+
+    return () => {
+      // Clean up handler when App unmounts
+      multiplayerConnection.onRaceStart = null;
+    };
+  }, [flowState]);
 
   const handleAuthenticated = (authData) => {
     console.log("User authenticated:", authData);

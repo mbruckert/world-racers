@@ -11,6 +11,7 @@ class MultiplayerConnection {
     this.onNewPartyMember = null;
     this.onDisconnect = null;
     this.onPositionUpdate = null;
+    this.onRaceStart = null;
 
     // API URLs
     this.API_BASE_URL = import.meta.env.VITE_API_URL;
@@ -97,6 +98,13 @@ class MultiplayerConnection {
           }
           break;
 
+        case "RaceStart":
+          console.log("Race start message received!");
+          if (this.onRaceStart) {
+            this.onRaceStart(message.map_data);
+          }
+          break;
+
         default:
           console.log("Received unhandled message type:", message.type);
       }
@@ -177,6 +185,20 @@ class MultiplayerConnection {
   // Get positions of all other players
   getPlayerPositions() {
     return this.userPositions;
+  }
+
+  startRace(mapData) {
+    if (!this.isConnected) return;
+
+    const startMessage = {
+      type: "RaceStart",
+      user_id: this.userId,
+      party_id: this.partyId,
+      map_data: mapData,
+    };
+
+    this.sendMessage(startMessage);
+    console.log("Sent race start message");
   }
 }
 

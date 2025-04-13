@@ -3,12 +3,13 @@ import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Environment } from "@react-three/drei";
 import GlobeModel from "./GlobeModel";
 import logo from "../assets/logo.png";
-import { fetchWithAuth, getAuthData } from "../utils/auth";
+import { fetchWithAuth, getAuthData, getUserData } from "../utils/auth";
 
 export default function JoinPartyScreen({ onJoined, onCancel }) {
   const [code, setCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const userData = getUserData();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -27,6 +28,7 @@ export default function JoinPartyScreen({ onJoined, onCancel }) {
         method: "POST",
         body: JSON.stringify({
           code: code.trim(),
+          user_id: userData.id,
         }),
       });
 
@@ -35,6 +37,7 @@ export default function JoinPartyScreen({ onJoined, onCancel }) {
       }
 
       const joinedPartyData = await response.json();
+      console.log("Successfully joined party:", joinedPartyData);
 
       // Notify parent component
       if (onJoined) {
