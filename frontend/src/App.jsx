@@ -10,7 +10,6 @@ import MapSelectScreen from "./components/MapSelectScreen";
 import RoomScreen from "./components/RoomScreen";
 import JoinPartyScreen from "./components/JoinPartyScreen";
 import { isAuthenticated, getAuthData, fetchWithAuth } from "./utils/auth";
-import multiplayerConnection from "./utils/websocket";
 
 function App() {
   const [startPosition, setStartPosition] = useState(null);
@@ -38,61 +37,26 @@ function App() {
     setError("");
   }, [demoMode]);
 
-  // Handle race start WebSocket event
+  // Add a custom event listener for race_started as a fallback mechanism
   useEffect(() => {
-    // Setup race start handler to sync the race starting across clients
-    multiplayerConnection.onRaceStart = () => {
-      console.log("Race start event received in App, current state:", {
-        flowState,
-        party,
-        demoMode,
-      });
-
-      // Go straight to race view - skip the preview for non-host players
-      if (flowState !== "racing") {
-        // If we're in a joined party, we should already have map data
-        // from the party/map endpoint
-        if (party && !demoMode) {
-          // Fetch map data if needed
-          fetchMapData(party.id).catch(console.error);
-        }
-
-        console.log("Transitioning to racing state from:", flowState);
-        setFlowState("racing");
+    const handleRaceStarted = (event) => {
+      console.log("Received race_started custom event", event.detail);
+      if (party && (flowState === "room" || flowState === "preview")) {
+        console.log("Transitioning to preview based on custom event");
+        setFlowState("preview");
+        // Auto-transition to racing after a brief delay
+        setTimeout(() => {
+          console.log("Auto-transitioning to racing state");
+          setFlowState("racing");
+        }, 1000);
       }
     };
 
+    window.addEventListener("race_started", handleRaceStarted);
     return () => {
-      // Clean up handler when App unmounts
-      multiplayerConnection.onRaceStart = null;
+      window.removeEventListener("race_started", handleRaceStarted);
     };
-  }, [flowState, party, demoMode]);
-
-  // Function to fetch map data for a joined party
-  const fetchMapData = async (partyId) => {
-    try {
-      const response = await fetchWithAuth(`/parties/${partyId}/map`);
-      if (response.ok) {
-        const mapData = await response.json();
-
-        // Set up route data from received map data
-        setStartPosition([mapData.start_longitude, mapData.start_latitude]);
-        setEndPosition([mapData.end_longitude, mapData.end_latitude]);
-
-        if (mapData.checkpoints && Array.isArray(mapData.checkpoints)) {
-          const formattedCheckpoints = mapData.checkpoints.map((cp) => [
-            cp.longitude,
-            cp.latitude,
-          ]);
-          setCheckpoints(formattedCheckpoints);
-        }
-
-        setLocationName(mapData.title || "");
-      }
-    } catch (error) {
-      console.error("Error fetching map data:", error);
-    }
-  };
+  }, [party, flowState]);
 
   const handleAuthenticated = (authData) => {
     console.log("User authenticated:", authData);
@@ -178,52 +142,7 @@ function App() {
     setFlowState("mapSelect");
   };
 
-  // Ensure WebSocket connection is established whenever we have party data
-  useEffect(() => {
-    if (!party || !party.id || demoMode) return;
-
-    // Get user data for connection
-    const authData = getAuthData();
-    if (!authData?.sub) {
-      console.error("Cannot connect to WebSocket: missing user ID");
-      return;
-    }
-
-    const userId = authData.sub;
-    const partyId = party.id;
-
-    console.log("App: Establishing WebSocket connection for party:", {
-      userId,
-      partyId,
-      party,
-    });
-
-    // Establish connection
-    multiplayerConnection.connect(userId, partyId);
-
-    return () => {
-      // Only disconnect when App unmounts
-      // multiplayerConnection.disconnect();
-    };
-  }, [party, demoMode]);
-
   const handleJoinGame = (partyData) => {
-    console.log("Handling join game with data:", partyData);
-
-    if (!partyData) {
-      console.error("No party data provided to handleJoinGame");
-      return;
-    }
-
-    // Prevent duplicate party state updates
-    if (party && party.id === partyData.id) {
-      console.log("Already joined this party, just updating state");
-      setFlowState("room");
-      return;
-    }
-
-    // Explicitly log the party data we're setting
-    console.log("Setting party state:", partyData);
     setParty(partyData);
 
     // If demo mode, check for the special demo flag
@@ -257,16 +176,7 @@ function App() {
       // Skip directly to preview
       setFlowState("preview");
     } else {
-      // For regular party, fetch map data immediately
-      if (partyData.id) {
-        console.log("Fetching map data for party:", partyData.id);
-        fetchMapData(partyData.id).catch((error) => {
-          console.error("Error fetching map data:", error);
-        });
-      }
-
       // If a regular party, go to room screen first
-      console.log("Transitioning to room screen with party:", partyData);
       setFlowState("room");
     }
   };
@@ -328,7 +238,6 @@ function App() {
       {flowState === "room" && (
         <RoomScreen
           mapData={selectedMap}
-          party={party}
           onStartRace={handleStartRace}
           onCancel={handleCancelRoom}
         />

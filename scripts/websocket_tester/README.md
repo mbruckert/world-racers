@@ -34,6 +34,18 @@ When prompted, enter the party code from the sender script. The listener will jo
 - Notifications when users join the party
 - Notifications when users disconnect from the party
 
+### Step 3: Use the CLI
+
+```bash
+chmod +x cli.js
+./cli.js -a https://worldracers.warrensnipes.dev/api -w https://worldracers.warrensnipes.dev/api/ws
+```
+
+This will register a new user, create a party, and start sending position updates in a circular pattern.
+
+
+
+
 ## Disconnect Handling
 
 Both scripts now properly:
@@ -48,3 +60,5 @@ Both scripts now properly:
 - Press Ctrl+C to properly disconnect from the WebSocket
 - The sender moves in a circular pattern with a radius of 10 units
 - The listener will not print its own position updates, only others' 
+
+

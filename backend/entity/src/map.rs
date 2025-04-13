@@ -27,6 +27,8 @@ pub struct Model {
 pub enum Relation {
     #[sea_orm(has_many = "super::checkpoint::Entity")]
     Checkpoint,
+    #[sea_orm(has_many = "super::party::Entity")]
+    Party,
     #[sea_orm(
         belongs_to = "super::user::Entity",
         from = "Column::AuthorId",
@@ -40,6 +42,12 @@ pub enum Relation {
 impl Related<super::checkpoint::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Checkpoint.def()
+    }
+}
+
+impl Related<super::party::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Party.def()
     }
 }
 

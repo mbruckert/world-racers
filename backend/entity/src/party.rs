@@ -13,10 +13,19 @@ pub struct Model {
     pub code: String,
     pub owner_id: i32,
     pub created_at: DateTimeWithTimeZone,
+    pub map_id: i32,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
+    #[sea_orm(
+        belongs_to = "super::map::Entity",
+        from = "Column::MapId",
+        to = "super::map::Column::Id",
+        on_update = "NoAction",
+        on_delete = "Cascade"
+    )]
+    Map,
     #[sea_orm(
         belongs_to = "super::user::Entity",
         from = "Column::OwnerId",
@@ -27,6 +36,12 @@ pub enum Relation {
     User,
     #[sea_orm(has_many = "super::user_party::Entity")]
     UserParty,
+}
+
+impl Related<super::map::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Map.def()
+    }
 }
 
 impl Related<super::user::Entity> for Entity {

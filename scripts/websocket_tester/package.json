@@ -2,12 +2,18 @@
   "name": "websocket-demo-scripts",
   "version": "1.0.0",
   "description": "Demo scripts for WebSocket position updates with disconnect notifications",
+  "type": "module",
   "scripts": {
     "sender": "node position_sender.js",
-    "listener": "node position_listener.js"
+    "listener": "node position_listener.js",
+    "cli": "node cli.js"
   },
   "dependencies": {
-    "axios": "^1.6.2",
-    "ws": "^8.14.2"
+    "axios": "^1.8.4",
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0",
+    "inquirer": "^12.5.2",
+    "readline-sync": "^1.4.10",
+    "ws": "^8.18.1"
   }
-} 
+}
