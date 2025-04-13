@@ -81,7 +81,7 @@ export default function RaceView({
   const [userData] = useState(getUserData());
   const multiplayerVehiclesRef = useRef(new Map());
 
-  const [playStartSound] = useSound(startSound, {playbackRate: 1.1});
+  const [playStartSound] = useSound(startSound, { playbackRate: 1.1 });
 
   // Format checkpoints to ensure they're in [longitude, latitude] format
   const formattedCheckpoints = useMemo(() => {
@@ -881,6 +881,37 @@ export default function RaceView({
     }
   };
 
+  // Function to load vehicle model
+  const loadVehicleModel = (onSuccess, onError) => {
+    const loader = new GLTFLoader();
+    loader.load(
+      "/models/low_poly_nissan_gtr.glb",
+      (gltf) => {
+        const vehicleMesh = gltf.scene.clone();
+        vehicleMesh.scale.set(1, 1, 1);
+        vehicleMesh.visible = true;
+
+        // Center the model
+        const box = new THREE.Box3().setFromObject(vehicleMesh);
+        const center = box.getCenter(new THREE.Vector3());
+        vehicleMesh.position.sub(center);
+
+        // Raise it slightly
+        vehicleMesh.position.y += 2;
+        onSuccess(vehicleMesh);
+      },
+      (xhr) => {
+        // Loading progress callback (optional)
+        const progress = (xhr.loaded / xhr.total) * 100;
+        console.log(`Car model loading: ${Math.round(progress)}%`);
+      },
+      (error) => {
+        console.error("Error loading car model:", error);
+        onError && onError(error);
+      }
+    );
+  };
+
   // Initialize multiplayer connection
   useEffect(() => {
     if (!partyId || !userData.id) return;
@@ -900,6 +931,57 @@ export default function RaceView({
     };
 
     multiplayerConnection.onPositionUpdate = (userId, position, rotation) => {
+      // Skip position updates for self
+      if (userId === userData.id) return;
+
+      // Always update the players list initially to ensure vehicle creation
+      if (!multiplayerVehiclesRef.current.has(userId)) {
+        // If this is the first update for this player, update the state immediately
+        setOtherPlayers((prev) => {
+          const newPlayers = new Map(prev);
+          const playerName =
+            multiplayerConnection.partyMembers.get(userId) || `Player ${userId}`;
+          newPlayers.set(userId, {
+            id: userId,
+            position,
+            rotation,
+            name: playerName,
+          });
+          return newPlayers;
+        });
+
+        // Create a placeholder vehicle immediately
+        loadVehicleModel(
+          (vehicleMesh) => {
+            // Set matrix handling properties
+            vehicleMesh.matrixAutoUpdate = false;
+            vehicleMesh.userData = {
+              position,
+              rotation
+            };
+
+            // Add to the scene
+            if (mapRef.current) {
+              const layer = mapRef.current.getLayer('multiplayer-vehicles');
+              if (layer && layer._this && layer._this.scene) {
+                layer._this.scene.add(vehicleMesh);
+                multiplayerVehiclesRef.current.set(userId, vehicleMesh);
+              }
+            }
+          },
+          (error) => {
+            console.error("Error loading car model:", error);
+          }
+        );
+      } else {
+        // Update existing vehicle data
+        const vehicle = multiplayerVehiclesRef.current.get(userId);
+        if (vehicle) {
+          vehicle.userData = { position, rotation };
+        }
+      }
+
+      // Less frequent state updates for UI purposes only
       setOtherPlayers((prev) => {
         const newPlayers = new Map(prev);
         const playerName =
@@ -912,6 +994,7 @@ export default function RaceView({
         });
         return newPlayers;
       });
+
     };
 
     // Connect to WebSocket server
@@ -935,7 +1018,7 @@ export default function RaceView({
       // Convert position and heading to the format expected by the server
       const position = {
         x: carPosition[0],
-        y: carPhysics.current.getElevation() || 0,
+        y: 0,
         z: carPosition[1],
       };
 
@@ -946,7 +1029,7 @@ export default function RaceView({
       };
 
       multiplayerConnection.sendPosition(position, rotation);
-    }, 100); // Send updates 10 times per second
+    }, 1000); // Send updates 1 times per second
 
     return () => clearInterval(sendPositionInterval);
   }, [raceStarted]);
@@ -1055,29 +1138,12 @@ export default function RaceView({
           this.scene.add(dirLight2);
 
           // Load primary car model
-          const loader = new GLTFLoader();
-          loader.load(
-            "/models/low_poly_nissan_gtr.glb",
-            (gltf) => {
-              this.carModel = gltf.scene;
-              this.carModel.scale.set(1, 1, 1);
-
-              // Center the model
-              const box = new THREE.Box3().setFromObject(this.carModel);
-              const center = box.getCenter(new THREE.Vector3());
-              this.carModel.position.sub(center);
-
-              // Raise it slightly
-              this.carModel.position.y += 2;
-
+          loadVehicleModel(
+            (vehicleMesh) => {
+              this.carModel = vehicleMesh;
               this.scene.add(this.carModel);
               carPhysics.current.modelLoaded = true;
               setModelLoaded(true);
-            },
-            (xhr) => {
-              // Loading progress callback (optional)
-              const progress = (xhr.loaded / xhr.total) * 100;
-              console.log(`Car model loading: ${Math.round(progress)}%`);
             },
             (error) => {
               console.error("Error loading car model:", error);
@@ -1252,8 +1318,12 @@ export default function RaceView({
         renderingMode: "3d",
 
         onAdd: function (map, gl) {
+          console.log('Called onAdd for multiplayer-vehicles')
           this.camera = new THREE.Camera();
           this.scene = new THREE.Scene();
+
+          // Store reference to this object for external access
+          map.getLayer('multiplayer-vehicles')._this = this;
 
           // Lights
           const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
@@ -1270,81 +1340,91 @@ export default function RaceView({
             antialias: false,
           });
           this.renderer.autoClear = false;
+          console.log('Finished onAdd for multiplayer-vehicles')
         },
 
         render: function (gl, matrix) {
-          // Skip if no other players
-          if (otherPlayers.size === 0) return;
+          // Skip if no other players' vehicles
+          if (multiplayerVehiclesRef.current.size === 0) return;
 
-          // Update position of all multiplayer vehicles
+          // Process only existing vehicles
+          multiplayerVehiclesRef.current.forEach((vehicle, playerId) => {
+            // Skip self
+            if (playerId === userData.id) return;
+
+            // If we have cached position data
+            if (vehicle.userData && vehicle.userData.position) {
+              const pos = vehicle.userData.position;
+              const rot = vehicle.userData.rotation;
+
+              // Get player position in mercator coordinates
+              const elevation = map.queryTerrainElevation([pos.x, pos.z]) || 0;
+              const merc = mapboxgl.MercatorCoordinate.fromLngLat([pos.x, pos.z], elevation);
+
+              // Scale factor
+              const modelScale = merc.meterInMercatorCoordinateUnits();
+
+              // Create transform matrices separately
+              const translateMatrix = new THREE.Matrix4().makeTranslation(merc.x, merc.y, merc.z);
+              const scaleMatrix = new THREE.Matrix4().makeScale(modelScale, modelScale, modelScale);
+
+              // Rotation - convert yaw to radians
+              const yawRadians = (rot.yaw * Math.PI) / 180;
+              const rotationMatrix = new THREE.Matrix4().makeRotationZ(yawRadians);
+
+              // Upright orientation (same as for the main car)
+              const uprightMatrix = new THREE.Matrix4().makeRotationAxis(
+                new THREE.Vector3(1, 0, 0),
+                Math.PI / 2
+              );
+
+              // Combine transformations in the correct order
+              let modelMatrix = new THREE.Matrix4();
+              modelMatrix
+                .multiply(translateMatrix)
+                .multiply(scaleMatrix)
+                .multiply(rotationMatrix)
+                .multiply(uprightMatrix);
+
+              // Important: disable auto matrix updates when setting matrix directly
+              vehicle.matrixAutoUpdate = false;
+              vehicle.matrix.copy(modelMatrix);
+              vehicle.matrixWorldNeedsUpdate = true;
+            }
+          });
+
+          // Add vehicles for any players that don't have them yet
           otherPlayers.forEach((player) => {
-            // Skip rendering self
             if (player.id === userData.id) return;
 
-            // Get player position in mercator coordinates
-            const merc = mapboxgl.MercatorCoordinate.fromLngLat(
-              [player.position.x, player.position.z],
-              player.position.y
-            );
+            if (!multiplayerVehiclesRef.current.has(player.id)) {
+              loadVehicleModel(
+                (vehicleMesh) => {
+                  console.log("Finished loading multiplayer model for player.id=", player.id)
+                  vehicleMesh.matrixAutoUpdate = false;
+                  vehicleMesh.userData = {
+                    position: player.position,
+                    rotation: player.rotation
+                  };
 
-            // Scale factor
-            const modelScale = merc.meterInMercatorCoordinateUnits();
-
-            // Create transform matrix
-            let modelMatrix = new THREE.Matrix4();
-
-            // Position
-            const translateMatrix = new THREE.Matrix4().makeTranslation(
-              merc.x,
-              merc.y,
-              merc.z
-            );
-
-            // Scale
-            const scaleMatrix = new THREE.Matrix4().makeScale(
-              modelScale,
-              modelScale,
-              modelScale
-            );
-
-            // Rotation - convert yaw to radians
-            const yawRadians = (player.rotation.yaw * Math.PI) / 180;
-            const rotationMatrix = new THREE.Matrix4().makeRotationZ(
-              yawRadians
-            );
-
-            // Upright orientation
-            const uprightMatrix = new THREE.Matrix4().makeRotationAxis(
-              new THREE.Vector3(1, 0, 0),
-              Math.PI / 2
-            );
-
-            // Combine transformations
-            modelMatrix
-              .multiply(translateMatrix)
-              .multiply(scaleMatrix)
-              .multiply(rotationMatrix)
-              .multiply(uprightMatrix);
-
-            // Update mesh
-            if (multiplayerVehiclesRef.current.has(player.id)) {
-              const vehicle = multiplayerVehiclesRef.current.get(player.id);
-              vehicle.matrix.copy(modelMatrix);
-              vehicle.matrixAutoUpdate = false;
-            } else {
-              // Create placeholder for now (actual model would be better)
-              const geometry = new THREE.BoxGeometry(1, 0.5, 2);
-              const material = new THREE.MeshStandardMaterial({
-                color: 0xff4040,
-                metalness: 0.7,
-                roughness: 0.3,
-              });
-              const vehicleMesh = new THREE.Mesh(geometry, material);
-              vehicleMesh.matrix.copy(modelMatrix);
-              vehicleMesh.matrixAutoUpdate = false;
-
-              this.scene.add(vehicleMesh);
-              multiplayerVehiclesRef.current.set(player.id, vehicleMesh);
+                  // Add to the scene if possible
+                  if (mapRef.current) {
+                    // Get the custom layer to add the vehicle to its scene
+                    const layer = mapRef.current.getLayer('multiplayer-vehicles');
+                    if (layer && layer._this && layer._this.scene) {
+                      console.log("did it!!!!")
+                      layer._this.scene.add(vehicleMesh);
+                      multiplayerVehiclesRef.current.set(player.id, vehicleMesh);
+                    } else {
+                      console.log('unable to add multiplayer model on load for other players')
+                    }
+                  }
+                },
+                (error) => {
+                  console.error("Error loading car model:", error);
+                  // Crash it
+                }
+              );
             }
           });
 
@@ -1353,8 +1433,6 @@ export default function RaceView({
           this.camera.projectionMatrix = projectionMatrix;
           this.renderer.resetState();
           this.renderer.render(this.scene, this.camera);
-
-          map.triggerRepaint();
         },
       });
 
@@ -1362,7 +1440,7 @@ export default function RaceView({
     });
 
     return () => map.remove();
-  }, [lightPreset, otherPlayers]);
+  }, [lightPreset]);
 
   // Keyboard input
   useEffect(() => {
