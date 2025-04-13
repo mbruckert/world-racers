@@ -31,8 +31,7 @@ impl Config {
                 .unwrap_or_else(|_| "8080".to_string())
                 .parse::<u16>()
                 .map_err(|e| ConfigError::ParseError("SERVER_PORT".to_string(), e.to_string()))?,
-            jwt_secret: env::var("JWT_SECRET")
-                .unwrap_or_else(|_| "your_jwt_secret_key_replace_in_production".to_string()),
+            jwt_secret: env::var("JWT_SECRET").unwrap(),
             jwt_expiry: env::var("JWT_EXPIRY")
                 .unwrap_or_else(|_| "3600".to_string()) // 1 hour default
                 .parse::<i64>()

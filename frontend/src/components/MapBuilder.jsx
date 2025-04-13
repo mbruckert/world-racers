@@ -137,6 +137,30 @@ export default function MapBuilder({ onRouteSubmit }) {
     setCheckpoints([]);
   };
 
+  const handleClearAll = () => {
+    // Clear checkpoints
+    checkpointMarkers.current.forEach((m) => m.remove());
+    checkpointMarkers.current = [];
+    setCheckpoints([]);
+
+    // Clear start point
+    if (startMarker.current) {
+      startMarker.current.remove();
+      startMarker.current = null;
+    }
+    setStart(null);
+
+    // Clear end point
+    if (endMarker.current) {
+      endMarker.current.remove();
+      endMarker.current = null;
+    }
+    setEnd(null);
+
+    // Clear error message
+    setError("");
+  };
+
   const handleSubmit = () => {
     if (!start || !end) {
       setError("Please set both a start and end point.");
@@ -226,98 +250,147 @@ export default function MapBuilder({ onRouteSubmit }) {
 
           {/* Map Controls */}
           <div className="flex gap-4 mt-4">
-            <button
-              onClick={() => (modeRef.current = "start")}
-              className="w-12 h-12 rounded-[16px] bg-white flex items-center justify-center text-green-500"
-              style={{ boxShadow: "0 4px 8px rgba(34, 197, 94, 0.4)" }} // green shadow
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="size-6"
+            <div className="relative group flex flex-col items-center">
+              <button
+                onClick={() => (modeRef.current = "start")}
+                className={`w-12 h-12 rounded-[16px] bg-white flex items-center justify-center ${
+                  start ? "text-gray-400 cursor-not-allowed" : "text-green-500"
+                }`}
+                style={{
+                  boxShadow: start
+                    ? "none"
+                    : "0 4px 8px rgba(34, 197, 94, 0.4)",
+                }}
+                disabled={!!start}
+                title="Set the starting point for your race"
               >
-                <path
-                  fillRule="evenodd"
-                  d="m11.54 22.351.07.04.028.016a.76.76 0 0 0 .723 0l.028-.015.071-.041a16.975 16.975 0 0 0 1.144-.742 19.58 19.58 0 0 0 2.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 0 0-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 0 0 2.682 2.282 16.975 16.975 0 0 0 1.145.742ZM12 13.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </button>
-            <button
-              onClick={() => (modeRef.current = "end")}
-              className="w-12 h-12 rounded-[16px] bg-white flex items-center justify-center text-red-500"
-              style={{ boxShadow: "0 4px 8px rgba(239, 68, 68, 0.4)" }} // red shadow
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="size-6"
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="size-6"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="m11.54 22.351.07.04.028.016a.76.76 0 0 0 .723 0l.028-.015.071-.041a16.975 16.975 0 0 0 1.144-.742 19.58 19.58 0 0 0 2.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 0 0-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 0 0 2.682 2.282 16.975 16.975 0 0 0 1.145.742ZM12 13.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </button>
+              <span className="text-xs text-white mt-2">Start</span>
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-gray-800 text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 pointer-events-none w-36 text-center z-10">
+                Set starting point for your race
+              </div>
+            </div>
+
+            <div className="relative group flex flex-col items-center">
+              <button
+                onClick={() => (modeRef.current = "end")}
+                className={`w-12 h-12 rounded-[16px] bg-white flex items-center justify-center ${
+                  end ? "text-gray-400 cursor-not-allowed" : "text-red-500"
+                }`}
+                style={{
+                  boxShadow: end ? "none" : "0 4px 8px rgba(239, 68, 68, 0.4)",
+                }}
+                disabled={!!end}
+                title="Set the finish point for your race"
               >
-                <path
-                  fillRule="evenodd"
-                  d="m11.54 22.351.07.04.028.016a.76.76 0 0 0 .723 0l.028-.015.071-.041a16.975 16.975 0 0 0 1.144-.742 19.58 19.58 0 0 0 2.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 0 0-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 0 0 2.682 2.282 16.975 16.975 0 0 0 1.145.742ZM12 13.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </button>
-            <button
-              onClick={() => (modeRef.current = "checkpoint")}
-              className="w-12 h-12 rounded-[16px] bg-white flex items-center justify-center text-purple-500"
-              style={{ boxShadow: "0 4px 8px rgba(168, 85, 247, 0.4)" }} // purple shadow
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="size-6"
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="size-6"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="m11.54 22.351.07.04.028.016a.76.76 0 0 0 .723 0l.028-.015.071-.041a16.975 16.975 0 0 0 1.144-.742 19.58 19.58 0 0 0 2.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 0 0-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 0 0 2.682 2.282 16.975 16.975 0 0 0 1.145.742ZM12 13.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </button>
+              <span className="text-xs text-white mt-2">Finish</span>
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-gray-800 text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 pointer-events-none w-36 text-center z-10">
+                Set finish point for your race
+              </div>
+            </div>
+
+            <div className="relative group flex flex-col items-center">
+              <button
+                onClick={() => (modeRef.current = "checkpoint")}
+                className="w-12 h-12 rounded-[16px] bg-white flex items-center justify-center text-purple-500"
+                style={{ boxShadow: "0 4px 8px rgba(168, 85, 247, 0.4)" }}
+                title="Add checkpoints your racers must pass through"
               >
-                <path
-                  fillRule="evenodd"
-                  d="M14.615 1.595a.75.75 0 0 1 .359.852L12.982 9.75h7.268a.75.75 0 0 1 .548 1.262l-10.5 11.25a.75.75 0 0 1-1.272-.71l1.992-7.302H3.75a.75.75 0 0 1-.548-1.262l10.5-11.25a.75.75 0 0 1 .913-.143Z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </button>
-            <button
-              onClick={handleClearCheckpoints}
-              className="px-4 rounded-[16px] bg-white flex items-center justify-center text-gray-500"
-              style={{ boxShadow: "0 4px 8px rgba(161, 161, 161, 0.4)" }} // blue shadow
-            >
-              <span className="mr-2">Clear</span>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="size-6"
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="size-6"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M14.615 1.595a.75.75 0 0 1 .359.852L12.982 9.75h7.268a.75.75 0 0 1 .548 1.262l-10.5 11.25a.75.75 0 0 1-1.272-.71l1.992-7.302H3.75a.75.75 0 0 1-.548-1.262l10.5-11.25a.75.75 0 0 1 .913-.143Z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </button>
+              <span className="text-xs text-white mt-2">Checkpoint</span>
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-gray-800 text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 pointer-events-none w-40 text-center z-10">
+                Add checkpoints racers must pass through
+              </div>
+            </div>
+
+            <div className="relative group w-36">
+              <button
+                onClick={handleClearAll}
+                className="w-full h-12 rounded-[16px] bg-white flex items-center justify-center text-gray-500"
+                style={{ boxShadow: "0 4px 8px rgba(161, 161, 161, 0.4)" }}
+                title="Clear all markers from the map"
               >
-                <path
-                  fillRule="evenodd"
-                  d="M16.5 4.478v.227a48.816 48.816 0 0 1 3.878.512.75.75 0 1 1-.256 1.478l-.209-.035-1.005 13.07a3 3 0 0 1-2.991 2.77H8.084a3 3 0 0 1-2.991-2.77L4.087 6.66l-.209.035a.75.75 0 0 1-.256-1.478A48.567 48.567 0 0 1 7.5 4.705v-.227c0-1.564 1.213-2.9 2.816-2.951a52.662 52.662 0 0 1 3.369 0c1.603.051 2.815 1.387 2.815 2.951Zm-6.136-1.452a51.196 51.196 0 0 1 3.273 0C14.39 3.05 15 3.684 15 4.478v.113a49.488 49.488 0 0 0-6 0v-.113c0-.794.609-1.428 1.364-1.452Zm-.355 5.945a.75.75 0 1 0-1.5.058l.347 9a.75.75 0 1 0 1.499-.058l-.346-9Zm5.48.058a.75.75 0 1 0-1.498-.058l-.347 9a.75.75 0 0 0 1.5.058l.345-9Z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </button>
-            <button
-              onClick={handleSubmit}
-              className="px-4 rounded-[16px] bg-white flex items-center justify-center text-blue-500"
-              style={{ boxShadow: "0 4px 8px rgba(59, 130, 246, 0.4)" }} // blue shadow
-            >
-              <span className="mr-2">Start Race</span>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="size-6"
+                <span className="mr-2">Clear All</span>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="size-6"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M16.5 4.478v.227a48.816 48.816 0 0 1 3.878.512.75.75 0 1 1-.256 1.478l-.209-.035-1.005 13.07a3 3 0 0 1-2.991 2.77H8.084a3 3 0 0 1-2.991-2.77L4.087 6.66l-.209.035a.75.75 0 0 1-.256-1.478A48.567 48.567 0 0 1 7.5 4.705v-.227c0-1.564 1.213-2.9 2.816-2.951a52.662 52.662 0 0 1 3.369 0c1.603.051 2.815 1.387 2.815 2.951Zm-6.136-1.452a51.196 51.196 0 0 1 3.273 0C14.39 3.05 15 3.684 15 4.478v.113a49.488 49.488 0 0 0-6 0v-.113c0-.794.609-1.428 1.364-1.452Zm-.355 5.945a.75.75 0 1 0-1.5.058l.347 9a.75.75 0 1 0 1.499-.058l-.346-9Zm5.48.058a.75.75 0 1 0-1.498-.058l-.347 9a.75.75 0 0 0 1.5.058l.345-9Z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </button>
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-gray-800 text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 pointer-events-none w-40 text-center z-10">
+                Clear all markers from the map
+              </div>
+            </div>
+
+            <div className="relative group w-36">
+              <button
+                onClick={handleSubmit}
+                className="w-full h-12 rounded-[16px] bg-white flex items-center justify-center text-blue-500"
+                style={{ boxShadow: "0 4px 8px rgba(59, 130, 246, 0.4)" }}
+                title="Begin your race with the current settings"
               >
-                <path
-                  fillRule="evenodd"
-                  d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653Z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </button>
+                <span className="mr-2">Start Race</span>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="size-6"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653Z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </button>
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-gray-800 text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 pointer-events-none w-40 text-center z-10">
+                Start your race with current settings
+              </div>
+            </div>
           </div>
         </div>
 

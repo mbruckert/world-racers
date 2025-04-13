@@ -4,6 +4,7 @@ use axum::{
     http::StatusCode,
     routing::{get, post},
 };
+use auth::middleware::AuthUser;
 use entity::party::{self, Entity as Party};
 use entity::user::{self, Entity as User};
 use entity::user_party::{self, Entity as UserParty};
@@ -56,7 +57,7 @@ pub struct UpdatePartyRequest {
 
 #[derive(Deserialize, ToSchema)]
 pub struct LeavePartyRequest {
-    user_id: i32,
+    // No longer need user_id as it will come from the auth token
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -379,21 +380,27 @@ pub async fn update_party(
     params(
         ("party_id" = i32, Path, description = "Party ID")
     ),
-    request_body = LeavePartyRequest,
     responses(
-        (status = 204, description = "Successfully left party"),
-        (status = 404, description = "Party or membership not found", body = String),
+        (status = 200, description = "Left party successfully"),
+        (status = 400, description = "Invalid request", body = String),
+        (status = 401, description = "Unauthorized", body = String),
+        (status = 404, description = "Party not found", body = String),
         (status = 500, description = "Internal server error", body = String)
+    ),
+    security(
+        ("jwt" = [])
     )
 )]
 pub async fn leave_party(
     State(state): State<AppState>,
     Path(party_id): Path<i32>,
-    Json(payload): Json<LeavePartyRequest>,
+    auth_user: AuthUser,
+    _: Json<LeavePartyRequest>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     let db = &state.conn;
-    let user_id = payload.user_id;
-
+    // Get the user ID from the auth token
+    let user_id = auth_user.0.sub as i32; // Assuming sub is already an i32-compatible value
+    
     // Verify the party exists
     let party = Party::find_by_id(party_id)
         .one(db)
@@ -404,30 +411,35 @@ pub async fn leave_party(
             format!("Party with id {} not found", party_id),
         ))?;
 
-    // Check if user is the owner
+    // Check if user is in the party
+    let user_party = UserParty::find()
+        .filter(user_party::Column::PartyId.eq(party_id))
+        .filter(user_party::Column::UserId.eq(user_id))
+        .one(db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or((
+            StatusCode::NOT_FOUND,
+            format!("User {} is not in party {}", user_id, party_id),
+        ))?;
+
+    // Cannot leave if you're the owner - must disband instead
     if party.owner_id == user_id {
         return Err((
             StatusCode::BAD_REQUEST,
-            "Party owner cannot leave the party. Delete the party instead.".to_string(),
+            "Party owner cannot leave; must disband the party".to_string(),
         ));
     }
 
-    // Find and delete the user-party relationship
-    let result = UserParty::delete_many()
+    // Delete the user_party entry to leave - using delete_many instead of delete_by_id
+    UserParty::delete_many()
         .filter(user_party::Column::UserId.eq(user_id))
         .filter(user_party::Column::PartyId.eq(party_id))
         .exec(db)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    if result.rows_affected == 0 {
-        return Err((
-            StatusCode::NOT_FOUND,
-            "User is not a member of this party".to_string(),
-        ));
-    }
-
-    Ok(StatusCode::NO_CONTENT)
+    Ok(StatusCode::OK)
 }
 
 /// Disband a party (only by owner)

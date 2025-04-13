@@ -1,8 +1,13 @@
 import { useState, useEffect } from "react";
 import "./App.css";
 import MapBuilder from "./components/MapBuilder";
+import MapBuilderExtended from "./components/MapBuilderExtended";
 import DroneShotOne from "./components/DroneShots/DroneShotOne";
 import RaceView from "./components/RaceView";
+import StartScreen from "./components/StartScreen";
+import AuthScreen from "./components/AuthScreen";
+import MapSelectScreen from "./components/MapSelectScreen";
+import { isAuthenticated, getAuthData } from "./utils/auth";
 
 function App() {
   const [startPosition, setStartPosition] = useState(null);
@@ -11,13 +16,27 @@ function App() {
   const [locationName, setLocationName] = useState("");
   const [timeOfDay, setTimeOfDay] = useState("day");
   const [weather, setWeather] = useState("clear");
-  const [flowState, setFlowState] = useState("building"); // building, preview, racing
+  const [flowState, setFlowState] = useState("start"); // auth, mapSelect, building, preview, racing
   const [error, setError] = useState("");
+  const [selectedMap, setSelectedMap] = useState(null);
 
+  // Check authentication on mount
   useEffect(() => {
-    // Reset error when flow state changes
+    if (isAuthenticated()) {
+      // If already authenticated, go to start screen
+      setFlowState("start");
+    } else {
+      // Need to authenticate first
+      setFlowState("auth");
+    }
+    // Reset error when component mounts or flow state changes
     setError("");
-  }, [flowState]);
+  }, []);
+
+  const handleAuthenticated = (authData) => {
+    console.log("User authenticated:", authData);
+    setFlowState("start");
+  };
 
   const handleRouteSubmit = (routeData) => {
     // Extract route data from the object that MapBuilder now sends
@@ -50,15 +69,49 @@ function App() {
     setFlowState("racing");
   };
 
+  const handleSelectMap = (map) => {
+    setSelectedMap(map);
+    // Convert the map data from API format to app format
+    setStartPosition([map.start_longitude, map.start_latitude]);
+    setEndPosition([map.end_longitude, map.end_latitude]);
+
+    // Assuming checkpoints are provided in the selected map
+    if (map.checkpoints && Array.isArray(map.checkpoints)) {
+      // Transform the checkpoints to the format the app expects
+      const formattedCheckpoints = map.checkpoints.map((cp) => [
+        cp.longitude,
+        cp.latitude,
+      ]);
+      setCheckpoints(formattedCheckpoints);
+    } else {
+      setCheckpoints([]);
+    }
+
+    setLocationName(map.title || "");
+    setFlowState("preview");
+  };
+
   const resetFlow = () => {
     // Confirm before resetting if in racing mode
     if (flowState === "racing") {
       if (window.confirm("Are you sure you want to build a new route?")) {
-        setFlowState("building");
+        setFlowState("mapSelect");
       }
     } else {
-      setFlowState("building");
+      setFlowState("mapSelect");
     }
+  };
+
+  const handleCreateGame = () => {
+    setFlowState("mapSelect");
+  };
+
+  const handleCreateNewMap = () => {
+    setFlowState("building");
+  };
+
+  const handleBypass = () => {
+    setFlowState("building");
   };
 
   return (
@@ -69,8 +122,26 @@ function App() {
         </div>
       )}
 
+      {flowState === "auth" && (
+        <AuthScreen onAuthenticated={handleAuthenticated} />
+      )}
+
+      {flowState === "start" && (
+        <StartScreen
+          handleBypass={handleBypass}
+          handleCreateGame={handleCreateGame}
+        />
+      )}
+
+      {flowState === "mapSelect" && (
+        <MapSelectScreen
+          onCreateNew={handleCreateNewMap}
+          onSelectMap={handleSelectMap}
+        />
+      )}
+
       {flowState === "building" && (
-        <MapBuilder onRouteSubmit={handleRouteSubmit} />
+        <MapBuilderExtended onRouteSubmit={handleRouteSubmit} />
       )}
 
       {flowState === "preview" && (
@@ -100,12 +171,6 @@ function App() {
             timeOfDay={timeOfDay}
             weather={weather}
           />
-          <button
-            onClick={resetFlow}
-            className="absolute top-4 right-4 bg-indigo-600 text-white px-4 py-2 rounded-lg shadow"
-          >
-            Build New Route
-          </button>
         </div>
       )}
     </div>

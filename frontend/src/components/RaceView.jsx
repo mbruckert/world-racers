@@ -15,6 +15,27 @@ const flashAnimationStyle = `
   0% { opacity: 0.7; }
   100% { opacity: 0; }
 }
+
+@keyframes rotate {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+@keyframes pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+@keyframes dashOffset {
+  0% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -30; }
+}
 `;
 
 export default function RaceView({
@@ -39,6 +60,12 @@ export default function RaceView({
   const [fps, setFps] = useState(0);
   // Store the frame times for averaging (past 20 frames)
   const frameTimesRef = useRef([]);
+  const [checkpointStatus, setCheckpointStatus] = useState([]);
+  const [raceComplete, setRaceComplete] = useState(false);
+  const [raceTime, setRaceTime] = useState(0);
+  const [compassDirection, setCompassDirection] = useState(0);
+  const [nextTargetName, setNextTargetName] = useState("");
+  const [distanceToNextTarget, setDistanceToNextTarget] = useState(0);
 
   // Initialize carPosition from props or default
   const initialPosition = useMemo(() => {
@@ -90,11 +117,6 @@ export default function RaceView({
     routeDistance: 0,
   });
 
-  // Race progress state
-  const [checkpointStatus, setCheckpointStatus] = useState([]);
-  const [raceComplete, setRaceComplete] = useState(false);
-  const [raceTime, setRaceTime] = useState(0);
-
   // Initialize checkpoint status and finish position
   useEffect(() => {
     // Ensure we're using consistent finish position
@@ -116,6 +138,11 @@ export default function RaceView({
 
     // Set initial car heading
     carPhysics.current.carHeading = initialHeading;
+
+    // Run updateCompassDirection once to initialize compass values
+    setTimeout(() => {
+      updateCompassDirection();
+    }, 100);
 
     // Apply initial bearing to map if map is ready
     if (mapRef.current) {
@@ -174,6 +201,11 @@ export default function RaceView({
     // Reset physics using the CarPhysics class
     carPhysics.current.reset(initialPosition, initialHeading, resetStatus);
     carPhysics.current.modelLoaded = false;
+
+    // Reset compass direction to initial value
+    setTimeout(() => {
+      updateCompassDirection();
+    }, 100);
 
     // Reset car position on map with calculated heading
     if (mapRef.current) {
@@ -255,6 +287,173 @@ export default function RaceView({
           type: "Feature",
           properties: {},
           geometry: routeGeometry,
+        },
+      });
+
+      // Add route line layer with improved visibility
+      map.addLayer({
+        id: "route-line",
+        type: "line",
+        source: "route",
+        layout: {
+          "line-join": "round",
+          "line-cap": "round",
+        },
+        paint: {
+          "line-color": "#0080ff",
+          "line-width": 8,
+          "line-opacity": 0.8,
+          "line-dasharray": [0.2, 0.2],
+          "line-gap-width": 2,
+          "line-emissive-strength": 0.5, // Makes the line glow
+        },
+      });
+
+      // Add a secondary outline for better visibility in all lighting conditions
+      map.addLayer(
+        {
+          id: "route-outline",
+          type: "line",
+          source: "route",
+          layout: {
+            "line-join": "round",
+            "line-cap": "round",
+          },
+          paint: {
+            "line-color": "#ffffff",
+            "line-width": 12,
+            "line-opacity": 0.4,
+            "line-blur": 2,
+          },
+        },
+        "route-line"
+      ); // Add outline beneath the main line
+
+      // Add a pulsing effect to make the route more noticeable
+      // First, create a pulsing dash pattern based on time
+      const animatedDashArray = [
+        "interpolate",
+        ["linear"],
+        ["%", ["*", 0.5, ["time"]], 1.0],
+        0,
+        [0.1, 2],
+        0.5,
+        [2, 0.1],
+        1,
+        [0.1, 2],
+      ];
+
+      // Add animated line on top for extra visibility
+      map.addLayer({
+        id: "route-pulse",
+        type: "line",
+        source: "route",
+        layout: {
+          "line-join": "round",
+          "line-cap": "round",
+        },
+        paint: {
+          "line-color": [
+            "match",
+            ["string", ["get", "lightPreset", ["config"]]],
+            "night",
+            "#00ffff", // Brighter cyan for night
+            "dusk",
+            "#00c8ff", // Bright blue for dusk
+            "dawn",
+            "#40a0ff", // Medium blue for dawn
+            "#0080ff", // Default blue for day
+          ],
+          "line-width": 4,
+          "line-opacity": 0.9,
+          "line-dasharray": animatedDashArray,
+          "line-emissive-strength": 0.8,
+        },
+      });
+
+      // Adding "3D" ground markers along the route for better visibility
+      // First, create point features along the route
+      const groundMarkers = {
+        type: "FeatureCollection",
+        features: [],
+      };
+
+      // Place markers every ~40 meters along the route
+      for (let i = 0; i < waypoints.length - 1; i++) {
+        const start = waypoints[i];
+        const end = waypoints[i + 1];
+        const dx = end[0] - start[0];
+        const dy = end[1] - start[1];
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        // Use more markers for longer segments
+        const steps = Math.max(3, Math.floor((dist * 111000) / 40)); // ~40m spacing
+
+        for (let j = 0; j <= steps; j++) {
+          const t = j / steps;
+          groundMarkers.features.push({
+            type: "Feature",
+            properties: {
+              index: i * 100 + j, // For animation offset
+            },
+            geometry: {
+              type: "Point",
+              coordinates: [start[0] + t * dx, start[1] + t * dy],
+            },
+          });
+        }
+      }
+
+      // Add ground markers source
+      map.addSource("route-markers", {
+        type: "geojson",
+        data: groundMarkers,
+      });
+
+      // Add circle markers with adaptive colors
+      map.addLayer({
+        id: "route-ground-markers",
+        type: "circle",
+        source: "route-markers",
+        paint: {
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            16,
+            1.5,
+            22,
+            5,
+          ],
+          "circle-color": [
+            "case",
+            ["==", ["get", "lightPreset", ["config"]], "night"],
+            "#40c0ff",
+            ["==", weather, "rain"],
+            "#80c0ff",
+            ["==", weather, "snow"],
+            "#40a0ff",
+            "#0080ff",
+          ],
+          "circle-opacity": [
+            "interpolate",
+            ["linear"],
+            [
+              "%",
+              ["+", ["*", 0.01, ["get", "index"]], ["*", 0.25, ["time"]]],
+              1,
+            ],
+            0,
+            0.3,
+            0.5,
+            1,
+            1,
+            0.3,
+          ],
+          "circle-emissive-strength": 0.5,
+          "circle-stroke-width": 1,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-opacity": 0.4,
         },
       });
 
@@ -421,7 +620,10 @@ export default function RaceView({
         // Check if car is within range of checkpoint
         // Make sure checkpoint has a position property before using it
         const checkpointPosition = checkpoint.position || checkpoint;
-        const distance = carPhysics.current.calculateDistance(carPosition, checkpointPosition);
+        const distance = carPhysics.current.calculateDistance(
+          carPosition,
+          checkpointPosition
+        );
 
         if (distance < checkpointRadius && !newStatus[index]) {
           // Checkpoint passed!
@@ -452,7 +654,10 @@ export default function RaceView({
 
       // Only check finish line if all checkpoints have been passed
       if (allPassed && !carPhysics.current.raceComplete) {
-        const finishDistance = carPhysics.current.calculateDistance(carPosition, finishPos);
+        const finishDistance = carPhysics.current.calculateDistance(
+          carPosition,
+          finishPos
+        );
 
         if (finishDistance < checkpointRadius) {
           // Race complete!
@@ -487,7 +692,10 @@ export default function RaceView({
       ];
       checkpoints.forEach((checkpoint, index) => {
         // Check if car is within range of checkpoint
-        const distance = carPhysics.current.calculateDistance(carPosition, checkpoint);
+        const distance = carPhysics.current.calculateDistance(
+          carPosition,
+          checkpoint
+        );
 
         if (distance < checkpointRadius && !newStatus[index]) {
           // Checkpoint passed!
@@ -518,7 +726,10 @@ export default function RaceView({
 
       // Check finish line only if all checkpoints passed
       if (allPassed && !carPhysics.current.raceComplete) {
-        const finishDistance = carPhysics.current.calculateDistance(carPosition, finishPos);
+        const finishDistance = carPhysics.current.calculateDistance(
+          carPosition,
+          finishPos
+        );
         if (finishDistance < checkpointRadius) {
           // Race complete!
           const totalTime = carPhysics.current.completeRace();
@@ -544,7 +755,10 @@ export default function RaceView({
       }
     } else {
       // No checkpoints, just check finish line
-      const finishDistance = carPhysics.current.calculateDistance(carPosition, finishPos);
+      const finishDistance = carPhysics.current.calculateDistance(
+        carPosition,
+        finishPos
+      );
 
       if (
         finishDistance < checkpointRadius &&
@@ -571,6 +785,67 @@ export default function RaceView({
           document.body.removeChild(flash);
         }, 1000);
       }
+    }
+  };
+
+  // Update compass direction
+  const updateCompassDirection = () => {
+    if (!carPhysics.current) return;
+
+    const carPosition = carPhysics.current.carPosition;
+    const carHeading = carPhysics.current.carHeading;
+    let targetPosition;
+    let targetName;
+
+    // Find the next uncompleted checkpoint
+    if (checkpoints && checkpoints.length > 0) {
+      const nextCheckpointIndex =
+        carPhysics.current.checkpointsPassed.findIndex((passed) => !passed);
+      if (nextCheckpointIndex !== -1) {
+        // We have a next checkpoint
+        targetPosition = checkpoints[nextCheckpointIndex];
+        targetName = `Checkpoint ${nextCheckpointIndex + 1}`;
+      } else {
+        // All checkpoints passed, target is finish line
+        targetPosition = carPhysics.current.actualFinishPosition;
+        targetName = "Finish";
+      }
+    } else {
+      // No checkpoints, so target is finish line
+      targetPosition = carPhysics.current.actualFinishPosition;
+      targetName = "Finish";
+    }
+
+    if (targetPosition) {
+      // Calculate direction to target
+      const dx = targetPosition[0] - carPosition[0];
+      const dy = targetPosition[1] - carPosition[1];
+
+      // Angle from car to target (in radians)
+      const targetAngle = Math.atan2(dx, dy);
+
+      // Compass should point relative to car heading
+      // Subtract car heading from target angle to get relative angle
+      let relativeAngle = targetAngle - carHeading;
+
+      // Normalize to -PI to PI range
+      relativeAngle = ((relativeAngle + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+
+      // Convert to degrees for display
+      const compassAngle = (relativeAngle * 180) / Math.PI;
+
+      // Force state update with fresh value
+      setCompassDirection(compassAngle);
+      setNextTargetName(targetName);
+
+      // Calculate distance to target (approximate in meters)
+      const distance = carPhysics.current.calculateDistance(
+        carPosition,
+        targetPosition
+      );
+      // Convert from degrees to meters (roughly)
+      const distanceInMeters = distance * 111000;
+      setDistanceToNextTarget(distanceInMeters);
     }
   };
 
@@ -924,6 +1199,7 @@ export default function RaceView({
     }
 
     let animationId;
+    let lastCompassUpdateTime = 0;
 
     const gameLoop = (timestamp) => {
       const state = carPhysics.current;
@@ -1002,12 +1278,12 @@ export default function RaceView({
 
       // Calculate average FPS every 10 frames
       if (timestamp % 100 < 16) {
-        const avgFrameTime = frameTimesRef.current.reduce((acc, time) => acc + time, 0) /
+        const avgFrameTime =
+          frameTimesRef.current.reduce((acc, time) => acc + time, 0) /
           frameTimesRef.current.length;
         const calculatedFps = Math.round(1000 / avgFrameTime);
         setFps(calculatedFps);
       }
-
 
       // Update car physics
       const handleOffTrack = () => {
@@ -1018,7 +1294,11 @@ export default function RaceView({
       };
 
       // Update physics and get new state
-      const carState = carPhysics.current.update(dt, routeCoordinates, handleOffTrack);
+      const carState = carPhysics.current.update(
+        dt,
+        routeCoordinates,
+        handleOffTrack
+      );
 
       // Move camera with the car
       if (mapRef.current) {
@@ -1049,6 +1329,13 @@ export default function RaceView({
           // Update UI ~10 times/sec
           setRaceTime(currentRaceTime);
         }
+      }
+
+      // Update compass direction more frequently
+      if (timestamp - lastCompassUpdateTime > 50) {
+        // Update every ~50ms
+        lastCompassUpdateTime = timestamp;
+        updateCompassDirection();
       }
 
       // Check race progress
@@ -1129,8 +1416,9 @@ export default function RaceView({
                 {checkpointStatus.map((passed, index) => (
                   <div
                     key={index}
-                    className={`w-4 h-4 rounded-full ${passed ? "bg-green-500" : "bg-gray-500"
-                      }`}
+                    className={`w-4 h-4 rounded-full ${
+                      passed ? "bg-green-500" : "bg-gray-500"
+                    }`}
                     title={`Checkpoint ${index + 1}`}
                   ></div>
                 ))}
@@ -1208,6 +1496,93 @@ export default function RaceView({
             <div>S / ↓: Brake/Reverse</div>
             <div>A / ←: Turn Left</div>
             <div>D / →: Turn Right</div>
+          </div>
+        </div>
+      )}
+
+      {/* Compass overlay */}
+      {raceStarted && !raceComplete && (
+        <div className="absolute top-1/2 right-8 transform -translate-y-1/2">
+          <div className="relative">
+            {/* Minimalist compass background */}
+            <div
+              className="w-24 h-24 rounded-full backdrop-blur-sm bg-black bg-opacity-20 flex items-center justify-center overflow-hidden border border-white border-opacity-10"
+              style={{ boxShadow: "0 0 10px rgba(0, 0, 0, 0.2)" }}
+            >
+              {/* Simple ring */}
+              <div className="absolute w-full h-full rounded-full border border-white border-opacity-20"></div>
+
+              {/* Cardinal directions */}
+              <div className="absolute top-2 left-1/2 transform -translate-x-1/2 text-white text-xs font-light">
+                N
+              </div>
+              <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-white text-xs font-light opacity-50">
+                S
+              </div>
+              <div className="absolute top-1/2 left-2 transform -translate-y-1/2 text-white text-xs font-light opacity-50">
+                W
+              </div>
+              <div className="absolute top-1/2 right-2 transform -translate-y-1/2 text-white text-xs font-light opacity-50">
+                E
+              </div>
+
+              {/* Minimal tick marks - only at cardinal points */}
+              {[0, 90, 180, 270].map((angle, i) => (
+                <div
+                  key={i}
+                  className="absolute w-0.5 h-1.5 bg-white bg-opacity-30"
+                  style={{
+                    transform: `rotate(${angle}deg) translateY(-11px)`,
+                    transformOrigin: "center 12px",
+                  }}
+                ></div>
+              ))}
+
+              {/* Compass base - non-rotating */}
+              <div className="absolute w-full h-full flex items-center justify-center">
+                <div className="w-1 h-1 bg-white rounded-full"></div>
+              </div>
+
+              {/* Direction arrow - clear styling to debug */}
+              <div
+                className="absolute w-full h-full top-1/2 left-1/2 pointer-events-none"
+                style={{
+                  transform: `translate(-50%, -50%) rotate(${compassDirection}deg)`,
+                  transition: "transform 0.15s ease-out",
+                }}
+                data-angle={compassDirection.toFixed(0)}
+              >
+                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                  {/* Arrow outline for better visibility */}
+                  <path
+                    d="M50,20 L56,50 L50,45 L44,50 L50,20Z"
+                    fill="white"
+                    stroke="rgba(0,0,0,0.3)"
+                    strokeWidth="1"
+                    fillOpacity="0.9"
+                  />
+                </svg>
+              </div>
+            </div>
+
+            {/* Target info - minimalist */}
+            <div className="mt-2 backdrop-blur-sm bg-black bg-opacity-20 py-1.5 px-3 rounded text-center border-t border-white border-opacity-10">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-white text-xs font-light">
+                  {nextTargetName}
+                </span>
+                <span className="text-white text-xs opacity-75 font-light">
+                  {distanceToNextTarget < 100
+                    ? `${Math.round(distanceToNextTarget)}m`
+                    : `${(distanceToNextTarget / 1000).toFixed(1)}km`}
+                </span>
+              </div>
+            </div>
+
+            {/* Debug info - angle display */}
+            <div className="mt-1 text-white text-[10px] text-center opacity-50">
+              Dir: {Math.round(compassDirection)}°
+            </div>
           </div>
         </div>
       )}
