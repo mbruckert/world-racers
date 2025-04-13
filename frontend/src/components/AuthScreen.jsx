@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Environment } from "@react-three/drei";
 import GlobeModel from "./GlobeModel";
@@ -50,6 +50,17 @@ export default function AuthScreen({ onAuthenticated }) {
     }
   };
 
+  useEffect(() => {
+        const script = document.createElement("script");
+        script.src = "https://unpkg.com/@h0rn0chse/night-sky/dist/bundle.min.js";
+        script.async = true;
+        document.body.appendChild(script);
+      
+        return () => {
+          document.body.removeChild(script);
+        };
+      }, []);
+
   return (
     <div className="w-screen h-screen bg-gradient-to-b from-[#0f0f2e] to-[#1a1a3f] flex items-center justify-center relative overflow-hidden">
       {/* Background Canvas for 3D Globe */}
@@ -64,6 +75,17 @@ export default function AuthScreen({ onAuthenticated }) {
           <OrbitControls enableZoom={false} enablePan={false} autoRotate />
           <Environment preset="sunset" />
         </Canvas>
+
+        <night-sky
+            id="nightSky"
+            layers="3"
+            density="40"
+            velocity-x="10"
+            velocity-y="10"
+            star-color="#FFF"
+            background-color="transparent"
+            className="absolute inset-0 z-[-1] pointer-events-none"
+         ></night-sky>
       </div>
 
       {/* Main UI content */}
