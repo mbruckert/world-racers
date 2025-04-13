@@ -3,12 +3,13 @@ import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Environment } from "@react-three/drei";
 import GlobeModel from "./GlobeModel";
 import logo from "../assets/logo.png";
-import { fetchWithAuth, getAuthData } from "../utils/auth";
+import { fetchWithAuth, getAuthData, getUserData } from "../utils/auth";
 
 export default function JoinPartyScreen({ onJoined, onCancel }) {
   const [code, setCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const userData = getUserData();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -27,6 +28,7 @@ export default function JoinPartyScreen({ onJoined, onCancel }) {
         method: "POST",
         body: JSON.stringify({
           code: code.trim(),
+          user_id: userData.id,
         }),
       });
 
@@ -35,6 +37,12 @@ export default function JoinPartyScreen({ onJoined, onCancel }) {
       }
 
       const joinedPartyData = await response.json();
+      console.log("Successfully joined party:", joinedPartyData);
+
+      // Add the party code to the URL for easier navigation
+      const url = new URL(window.location);
+      url.searchParams.set("code", code.trim());
+      window.history.pushState({}, "", url);
 
       // Notify parent component
       if (onJoined) {
@@ -48,7 +56,7 @@ export default function JoinPartyScreen({ onJoined, onCancel }) {
   };
 
   return (
-    <div className="w-screen h-screen bg-gradient-to-b from-[#0f0f2e] to-[#1a1a3f] flex items-center justify-center relative overflow-hidden">
+    <div className="w-screen h-screen bg-gradient-to-b from-[#1a1a3f] to-[#46628C] flex items-center justify-center relative overflow-hidden">
       {/* Background Canvas for 3D Globe */}
       <div className="absolute inset-0 z-0 pointer-events-none">
         <Canvas

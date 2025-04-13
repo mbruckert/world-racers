@@ -44,7 +44,7 @@ export default function MapSelectScreen({ onCreateNew, onSelectMap }) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#0f0f2e] to-[#1a1a3f] py-10 px-4">
+    <div className="min-h-screen bg-gradient-to-b from-[#1a1a3f] to-[#46628C] py-10 px-4">
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold text-white">Select a Map</h1>

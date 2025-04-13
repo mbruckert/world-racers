@@ -242,6 +242,8 @@ export default function MapBuilderExtended({ onRouteSubmit }) {
         checkpoints: formattedCheckpoints,
       };
 
+      console.log(mapData);
+
       const response = await fetchWithAuth("/maps", {
         method: "POST",
         body: JSON.stringify(mapData),

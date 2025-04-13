@@ -10,6 +10,7 @@ import MapSelectScreen from "./components/MapSelectScreen";
 import RoomScreen from "./components/RoomScreen";
 import JoinPartyScreen from "./components/JoinPartyScreen";
 import { isAuthenticated, getAuthData, fetchWithAuth } from "./utils/auth";
+import multiplayerConnection from "./utils/websocket";
 
 function App() {
   const [startPosition, setStartPosition] = useState(null);
@@ -22,11 +23,12 @@ function App() {
   const [error, setError] = useState("");
   const [selectedMap, setSelectedMap] = useState(null);
   const [party, setParty] = useState(null);
+  const [demoMode, setDemoMode] = useState(false);
 
   // Check authentication on mount
   useEffect(() => {
-    if (isAuthenticated()) {
-      // If already authenticated, go to start screen
+    if (isAuthenticated() || demoMode) {
+      // If already authenticated or in demo mode, go to start screen
       setFlowState("start");
     } else {
       // Need to authenticate first
@@ -34,7 +36,63 @@ function App() {
     }
     // Reset error when component mounts or flow state changes
     setError("");
-  }, []);
+  }, [demoMode]);
+
+  // Handle race start WebSocket event
+  useEffect(() => {
+    // Setup race start handler to sync the race starting across clients
+    multiplayerConnection.onRaceStart = () => {
+      console.log("Race start event received in App, current state:", {
+        flowState,
+        party,
+        demoMode,
+      });
+
+      // Go straight to race view - skip the preview for non-host players
+      if (flowState !== "racing") {
+        // If we're in a joined party, we should already have map data
+        // from the party/map endpoint
+        if (party && !demoMode) {
+          // Fetch map data if needed
+          fetchMapData(party.id).catch(console.error);
+        }
+
+        console.log("Transitioning to racing state from:", flowState);
+        setFlowState("racing");
+      }
+    };
+
+    return () => {
+      // Clean up handler when App unmounts
+      multiplayerConnection.onRaceStart = null;
+    };
+  }, [flowState, party, demoMode]);
+
+  // Function to fetch map data for a joined party
+  const fetchMapData = async (partyId) => {
+    try {
+      const response = await fetchWithAuth(`/parties/${partyId}/map`);
+      if (response.ok) {
+        const mapData = await response.json();
+
+        // Set up route data from received map data
+        setStartPosition([mapData.start_longitude, mapData.start_latitude]);
+        setEndPosition([mapData.end_longitude, mapData.end_latitude]);
+
+        if (mapData.checkpoints && Array.isArray(mapData.checkpoints)) {
+          const formattedCheckpoints = mapData.checkpoints.map((cp) => [
+            cp.longitude,
+            cp.latitude,
+          ]);
+          setCheckpoints(formattedCheckpoints);
+        }
+
+        setLocationName(mapData.title || "");
+      }
+    } catch (error) {
+      console.error("Error fetching map data:", error);
+    }
+  };
 
   const handleAuthenticated = (authData) => {
     console.log("User authenticated:", authData);
@@ -120,40 +178,97 @@ function App() {
     setFlowState("mapSelect");
   };
 
-  const handlePartyJoined = async (partyData) => {
-    setParty(partyData);
+  // Ensure WebSocket connection is established whenever we have party data
+  useEffect(() => {
+    if (!party || !party.id || demoMode) return;
 
-    try {
-      // Fetch map data for joined party
-      const response = await fetchWithAuth(`/parties/${partyData.id}/map`);
-
-      if (response.ok) {
-        const mapData = await response.json();
-
-        // Set map data
-        setSelectedMap(mapData);
-        setStartPosition([mapData.start_longitude, mapData.start_latitude]);
-        setEndPosition([mapData.end_longitude, mapData.end_latitude]);
-
-        if (mapData.checkpoints && Array.isArray(mapData.checkpoints)) {
-          const formattedCheckpoints = mapData.checkpoints.map((cp) => [
-            cp.longitude,
-            cp.latitude,
-          ]);
-          setCheckpoints(formattedCheckpoints);
-        } else {
-          setCheckpoints([]);
-        }
-
-        setLocationName(mapData.title || "");
-      }
-    } catch (err) {
-      console.error("Error fetching map data:", err);
-      // Continue even if map data fetch fails
+    // Get user data for connection
+    const authData = getAuthData();
+    if (!authData?.sub) {
+      console.error("Cannot connect to WebSocket: missing user ID");
+      return;
     }
 
-    // Go to preview before racing
-    setFlowState("preview");
+    const userId = authData.sub;
+    const partyId = party.id;
+
+    console.log("App: Establishing WebSocket connection for party:", {
+      userId,
+      partyId,
+      party,
+    });
+
+    // Establish connection
+    multiplayerConnection.connect(userId, partyId);
+
+    return () => {
+      // Only disconnect when App unmounts
+      // multiplayerConnection.disconnect();
+    };
+  }, [party, demoMode]);
+
+  const handleJoinGame = (partyData) => {
+    console.log("Handling join game with data:", partyData);
+
+    if (!partyData) {
+      console.error("No party data provided to handleJoinGame");
+      return;
+    }
+
+    // Prevent duplicate party state updates
+    if (party && party.id === partyData.id) {
+      console.log("Already joined this party, just updating state");
+      setFlowState("room");
+      return;
+    }
+
+    // Explicitly log the party data we're setting
+    console.log("Setting party state:", partyData);
+    setParty(partyData);
+
+    // If demo mode, check for the special demo flag
+    if (partyData.isGuestMode) {
+      setDemoMode(true);
+
+      // Set up dummy map data from the party
+      if (partyData.mapData) {
+        setSelectedMap(partyData.mapData);
+        setStartPosition([
+          partyData.mapData.start_longitude,
+          partyData.mapData.start_latitude,
+        ]);
+        setEndPosition([
+          partyData.mapData.end_longitude,
+          partyData.mapData.end_latitude,
+        ]);
+
+        // Format checkpoints properly
+        if (
+          partyData.mapData.checkpoints &&
+          Array.isArray(partyData.mapData.checkpoints)
+        ) {
+          const formattedCheckpoints = partyData.mapData.checkpoints.map(
+            (cp) => [cp.longitude, cp.latitude]
+          );
+          setCheckpoints(formattedCheckpoints);
+        }
+      }
+
+      // Skip directly to preview
+      setFlowState("preview");
+    } else {
+      // For regular party, fetch map data immediately
+      if (partyData.id) {
+        console.log("Fetching map data for party:", partyData.id);
+        fetchMapData(partyData.id).catch((error) => {
+          console.error("Error fetching map data:", error);
+        });
+      }
+
+      // If a regular party, go to room screen first
+      console.log("Transitioning to room screen with party:", partyData);
+      setFlowState("room");
+    }
   };
 
   const handleCreateNewMap = () => {
@@ -188,13 +303,13 @@ function App() {
         <StartScreen
           handleBypass={handleBypass}
           handleCreateGame={handleCreateGame}
-          handleJoinGame={handlePartyJoined}
+          handleJoinGame={handleJoinGame}
         />
       )}
 
       {flowState === "joinParty" && (
         <JoinPartyScreen
-          onJoined={handlePartyJoined}
+          onJoined={handleJoinGame}
           onCancel={handleCancelJoin}
         />
       )}
@@ -213,6 +328,7 @@ function App() {
       {flowState === "room" && (
         <RoomScreen
           mapData={selectedMap}
+          party={party}
           onStartRace={handleStartRace}
           onCancel={handleCancelRoom}
         />
@@ -244,7 +360,7 @@ function App() {
             checkpoints={checkpoints}
             timeOfDay={timeOfDay}
             weather={weather}
-            party={party}
+            partyId={demoMode ? "demo-party" : party?.id}
           />
         </div>
       )}
