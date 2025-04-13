@@ -59,6 +59,7 @@ export default function RaceView({
   const [_routeLoaded, setRouteLoaded] = useState(false);
   const [routeCoordinates, setRouteCoordinates] = useState([]);
   const [offTrackWarning, setOffTrackWarning] = useState(false);
+  const [warningZoneAlert, setWarningZoneAlert] = useState(false);
   const [optimizedCheckpoints, setOptimizedCheckpoints] = useState([]);
   // Add FPS state
   const [fps, setFps] = useState(0);
@@ -385,10 +386,10 @@ export default function RaceView({
             lightPreset === "night"
               ? "#00ffff" // Brighter cyan for night
               : lightPreset === "dusk"
-              ? "#00c8ff" // Bright blue for dusk
-              : lightPreset === "dawn"
-              ? "#40a0ff" // Medium blue for dawn
-              : "#0080ff", // Default blue for day
+                ? "#00c8ff" // Bright blue for dusk
+                : lightPreset === "dawn"
+                  ? "#40a0ff" // Medium blue for dawn
+                  : "#0080ff", // Default blue for day
           "line-width": 4,
           "line-opacity": 0.9,
           "line-dasharray": [0.1, 2],
@@ -454,10 +455,10 @@ export default function RaceView({
             lightPreset === "night"
               ? "#40c0ff"
               : weather === "rain"
-              ? "#80c0ff"
-              : weather === "snow"
-              ? "#40a0ff"
-              : "#0080ff",
+                ? "#80c0ff"
+                : weather === "snow"
+                  ? "#40a0ff"
+                  : "#0080ff",
           "circle-opacity": 0.7,
           "circle-emissive-strength": 0.5,
           "circle-stroke-width": 1,
@@ -946,7 +947,7 @@ export default function RaceView({
       container: mapContainerRef.current,
       style: "mapbox://styles/mapbox/standard",
       center: carPhysics.current.carPosition,
-      zoom: 21,
+      zoom: 22,
       pitch: 55,
       bearing: (carPhysics.current.carHeading * 180) / Math.PI, // Use car's heading in degrees
       antialias: false,
@@ -1508,10 +1509,17 @@ export default function RaceView({
       }
 
       // Update car physics
-      const handleOffTrack = () => {
+      const handleOffTrack = (message) => {
         if (!offTrackWarning) {
           setOffTrackWarning(true);
-          setTimeout(() => setOffTrackWarning(false), 1000);
+          setTimeout(() => setOffTrackWarning(false), 1500);
+        }
+      };
+
+      const handleWarningZone = (message) => {
+        if (!warningZoneAlert) {
+          setWarningZoneAlert(true);
+          setTimeout(() => setWarningZoneAlert(false), 1000);
         }
       };
 
@@ -1519,7 +1527,8 @@ export default function RaceView({
       const carState = carPhysics.current.update(
         dt,
         routeCoordinates,
-        handleOffTrack
+        handleOffTrack,
+        handleWarningZone
       );
 
       // Move camera with the car
@@ -1662,9 +1671,8 @@ export default function RaceView({
                 {checkpointStatus.map((passed, index) => (
                   <div
                     key={index}
-                    className={`w-4 h-4 rounded-full ${
-                      passed ? "bg-green-500" : "bg-gray-500"
-                    }`}
+                    className={`w-4 h-4 rounded-full ${passed ? "bg-green-500" : "bg-gray-500"
+                      }`}
                     title={`Checkpoint ${index + 1}`}
                   ></div>
                 ))}
@@ -1723,13 +1731,23 @@ export default function RaceView({
         </div>
       )}
 
-      {/* Off-track warning */}
+      {/* Warning zone alert - less severe than off-track */}
+      {warningZoneAlert && (
+        <div
+          className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 
+                      bg-yellow-500 bg-opacity-60 text-white px-6 py-3 rounded-lg text-xl font-bold"
+        >
+          Warning: Getting off track!
+        </div>
+      )}
+
+      {/* Off-track warning - update styling to be more severe */}
       {offTrackWarning && (
         <div
           className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 
-                      bg-red-600 bg-opacity-60 text-white px-6 py-3 rounded-lg text-xl font-bold"
+                      bg-red-600 bg-opacity-70 text-white px-6 py-3 rounded-lg text-xl font-bold"
         >
-          Stay on the track!
+          Turn around! You're too far from the track!
         </div>
       )}
 
@@ -1830,6 +1848,16 @@ export default function RaceView({
               Dir: {Math.round(compassDirection)}°
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Speedometer - show only during active race */}
+      {raceStarted && !raceComplete && (
+        <div className="absolute bottom-4 right-4 bg-black bg-opacity-60 text-white p-3 rounded-lg flex flex-col items-center justify-center">
+          <div className="text-3xl font-bold">
+            {Math.round(debugInfo.speed * 3000000)} km/h
+          </div>
+          <div className="text-xs text-gray-300">SPEED</div>
         </div>
       )}
 
