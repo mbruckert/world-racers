@@ -108,8 +108,35 @@ class MultiplayerConnection {
 
         case "RaceStarted":
           console.log("Race start message received!");
+          // Add additional logging to help debug
+          console.log("onRaceStart handler exists:", !!this.onRaceStart);
+
           if (this.onRaceStart) {
-            this.onRaceStart();
+            console.log("Calling onRaceStart handler");
+
+            // Use setTimeout to ensure this runs after current execution context
+            setTimeout(() => {
+              try {
+                this.onRaceStart();
+                console.log("onRaceStart handler executed successfully");
+              } catch (error) {
+                console.error("Error in onRaceStart handler:", error);
+              }
+            }, 10);
+          } else {
+            console.warn("No onRaceStart handler registered");
+
+            // Try to trigger a custom event as a fallback mechanism
+            try {
+              window.dispatchEvent(
+                new CustomEvent("race_started", {
+                  detail: { timestamp: new Date().toISOString() },
+                })
+              );
+              console.log("Dispatched race_started custom event");
+            } catch (error) {
+              console.error("Error dispatching custom event:", error);
+            }
           }
           break;
 

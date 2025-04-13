@@ -37,6 +37,27 @@ function App() {
     setError("");
   }, [demoMode]);
 
+  // Add a custom event listener for race_started as a fallback mechanism
+  useEffect(() => {
+    const handleRaceStarted = (event) => {
+      console.log("Received race_started custom event", event.detail);
+      if (party && (flowState === "room" || flowState === "preview")) {
+        console.log("Transitioning to preview based on custom event");
+        setFlowState("preview");
+        // Auto-transition to racing after a brief delay
+        setTimeout(() => {
+          console.log("Auto-transitioning to racing state");
+          setFlowState("racing");
+        }, 1000);
+      }
+    };
+
+    window.addEventListener("race_started", handleRaceStarted);
+    return () => {
+      window.removeEventListener("race_started", handleRaceStarted);
+    };
+  }, [party, flowState]);
+
   const handleAuthenticated = (authData) => {
     console.log("User authenticated:", authData);
     setFlowState("start");

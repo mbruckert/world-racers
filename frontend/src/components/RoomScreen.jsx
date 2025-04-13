@@ -68,9 +68,41 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
     multiplayerConnection.onRaceStart = () => {
       console.log("Race starting from WebSocket event!");
       if (onStartRace && party) {
-        onStartRace(party);
+        // Force navigation to race even for non-owners
+        console.log("Forcing race start from WebSocket event");
+
+        // Give a brief moment to ensure all clients receive the message
+        setTimeout(() => {
+          try {
+            console.log("Executing onStartRace callback with party:", party);
+            onStartRace(party);
+          } catch (error) {
+            console.error("Error in onStartRace callback:", error);
+
+            // As a last resort, dispatch a custom event
+            window.dispatchEvent(
+              new CustomEvent("race_started", {
+                detail: { timestamp: new Date().toISOString(), party },
+              })
+            );
+          }
+        }, 500);
       }
     };
+
+    // Also set up a listener for the custom event as a fallback
+    const handleRaceStarted = (event) => {
+      console.log("RoomScreen received race_started custom event");
+      if (onStartRace && party) {
+        try {
+          onStartRace(party);
+        } catch (error) {
+          console.error("Error in fallback race start handler:", error);
+        }
+      }
+    };
+
+    window.addEventListener("race_started", handleRaceStarted);
 
     // Set up handler for new party members
     multiplayerConnection.onNewPartyMember = (data) => {
@@ -96,6 +128,7 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
     return () => {
       multiplayerConnection.onRaceStart = null;
       multiplayerConnection.onNewPartyMember = null;
+      window.removeEventListener("race_started", handleRaceStarted);
     };
   }, [onStartRace, party]);
 
@@ -194,13 +227,28 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
       // Send race start message to all connected players
       if (multiplayerConnection.isConnected) {
         console.log("Sending StartRace WebSocket message");
-        multiplayerConnection.startRace();
 
-        // Give the message a moment to propagate before navigating
-        setTimeout(() => {
-          console.log("Starting race after WebSocket message sent");
+        // Make sure the connection is truly established
+        if (
+          multiplayerConnection.ws &&
+          multiplayerConnection.ws.readyState === WebSocket.OPEN
+        ) {
+          // Send the start race message
+          multiplayerConnection.startRace();
+
+          console.log("StartRace message sent successfully");
+
+          // Give the message a moment to propagate before navigating
+          setTimeout(() => {
+            console.log("Starting race after WebSocket message sent");
+            onStartRace(party);
+          }, 800); // Longer timeout to ensure message propagation
+        } else {
+          console.warn(
+            "WebSocket not in OPEN state, starting race without websocket"
+          );
           onStartRace(party);
-        }, 300);
+        }
       } else {
         console.warn(
           "WebSocket not connected, starting race without multiplayer sync"
