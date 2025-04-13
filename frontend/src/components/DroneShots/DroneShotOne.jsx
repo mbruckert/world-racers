@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
+import useSound from "use-sound";
+import courseIntroSound from "../../assets/course_intro.mp3";
 
 import "mapbox-gl/dist/mapbox-gl.css";
 
@@ -16,6 +18,9 @@ export default function DroneShotOne({
   const mapRef = useRef();
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [showLocationName, setShowLocationName] = useState(false);
+
+  // Initialize the useSound hook
+  const [playCourseIntro] = useSound(courseIntroSound);
 
   // Format checkpoints to ensure they're in [longitude, latitude] format
   const formatCheckpoints = () => {
@@ -224,6 +229,9 @@ export default function DroneShotOne({
     let lastTimestamp = 0;
 
     mapRef.current.once("idle", () => {
+      // Play the course intro sound when the map is ready
+      playCourseIntro();
+
       const lerp = (a, b, t) => {
         if (Array.isArray(a) && Array.isArray(b)) {
           const result = [];
@@ -293,7 +301,7 @@ export default function DroneShotOne({
           prevTarget: null,
         },
         {
-          duration: 4000.0,
+          duration: 5000.0,
           animate: (phase) => {
             // Final approach to the end point
             const startPos = [
@@ -383,7 +391,7 @@ export default function DroneShotOne({
         mapRef.current.remove();
       }
     };
-  }, [startPosition, endPosition, checkpoints, onAnimationComplete]);
+  }, [startPosition, endPosition, checkpoints, onAnimationComplete, playCourseIntro]);
 
   return (
     <div className="relative w-full h-full">
@@ -400,11 +408,10 @@ export default function DroneShotOne({
         }}
       >
         <div
-          className={`flex flex-col items-start justify-start p-10 transition-all duration-1000 ease-out ${
-            showLocationName
-              ? "opacity-100 translate-y-0"
-              : "opacity-0 -translate-y-10"
-          }`}
+          className={`flex flex-col items-start justify-start p-10 transition-all duration-1000 ease-out ${showLocationName
+            ? "opacity-100 translate-y-0"
+            : "opacity-0 -translate-y-10"
+            }`}
         >
           <div className="flex flex-col">
             <span className="text-blue-300 text-sm font-medium uppercase tracking-widest mb-1">

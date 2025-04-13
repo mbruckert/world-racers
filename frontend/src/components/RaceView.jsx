@@ -9,6 +9,10 @@ import multiplayerConnection from "../utils/websocket";
 import { getUserData } from "../utils/auth";
 import MultiplayerVehicle from "./MultiplayerVehicle";
 
+import useSound from 'use-sound';
+
+import startSound from "../assets/start_sound.mp3";
+
 // Access token
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_API_KEY;
 
@@ -76,6 +80,8 @@ export default function RaceView({
   const [otherPlayers, setOtherPlayers] = useState(new Map());
   const [userData] = useState(getUserData());
   const multiplayerVehiclesRef = useRef(new Map());
+
+  const [playStartSound] = useSound(startSound, {playbackRate: 1.1});
 
   // Format checkpoints to ensure they're in [longitude, latitude] format
   const formattedCheckpoints = useMemo(() => {
@@ -269,7 +275,11 @@ export default function RaceView({
   // Start the countdown when both models are loaded
   useEffect(() => {
     if (isMapLoaded && modelLoaded) {
+      playStartSound()
+      // Create audio object outside interval      
       const timer = setInterval(() => {
+        // Play sound before updating countdown
+
         setCountdown((prev) => {
           if (prev <= 1) {
             clearInterval(timer);
@@ -969,7 +979,7 @@ export default function RaceView({
         "horizon-blend": 0.2, // Smooth transition between fog and sky
         "space-color": "rgb(140, 150, 180)", // Upper atmosphere
         "star-intensity": 0.15, // Slight star visibility
-        range: [1, 8], // Start and end distances for fog effect (in km)
+        range: [4, 8], // Start and end distances for fog effect (in km)
       });
 
       // (Optional) 3D buildings if the style has a "composite" source
@@ -1855,7 +1865,7 @@ export default function RaceView({
       {raceStarted && !raceComplete && (
         <div className="absolute bottom-4 right-4 bg-black bg-opacity-60 text-white p-3 rounded-lg flex flex-col items-center justify-center">
           <div className="text-3xl font-bold">
-            {Math.round(debugInfo.speed * 3000000)} km/h
+            {Math.round(debugInfo.speed * 3000000 * 0.621371)} mph
           </div>
           <div className="text-xs text-gray-300">SPEED</div>
         </div>
