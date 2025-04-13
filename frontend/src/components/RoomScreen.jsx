@@ -298,22 +298,74 @@ export default function RoomScreen({
       if (onStartRace) {
         console.log("Calling onStartRace callback");
         // Include map data for both creator and joiner
-        if (mapData) {
-          // If we're the creator, include the mapData that was passed to this component
-          const partyWithMapData = {
-            ...party,
-            mapData: mapData,
-          };
-          console.log("Starting race with map data:", mapData);
-          onStartRace(partyWithMapData);
-        } else if (partyMapData) {
-          // If we have fetched map data, include it
+        if (partyMapData) {
+          // First priority: If we have fetched map data with checkpoints, use it
           const partyWithMapData = {
             ...party,
             mapData: partyMapData,
           };
           console.log("Starting race with fetched map data:", partyMapData);
           onStartRace(partyWithMapData);
+        } else if (mapData) {
+          // If we're the creator and don't have fetched map data, but have map data from props
+          console.log(
+            "Starting race with component map data but fetching checkpoints first..."
+          );
+
+          // Fetch map details to ensure we have complete checkpoint data
+          const fetchAndStartWithDetails = async () => {
+            try {
+              console.log(`Fetching map details for map ID: ${mapData.id}`);
+              const response = await fetchWithAuth(
+                `/maps/${mapData.id}/details`
+              );
+
+              if (response.ok) {
+                const mapDetails = await response.json();
+                console.log("Retrieved complete map details:", mapDetails);
+
+                // Enhance map data with checkpoints
+                const enhancedMapData = {
+                  ...mapData,
+                  checkpoints: mapDetails.checkpoints || [],
+                };
+
+                console.log(
+                  "Starting race with enhanced map data including checkpoints:",
+                  enhancedMapData
+                );
+
+                const partyWithMapData = {
+                  ...party,
+                  mapData: enhancedMapData,
+                };
+                onStartRace(partyWithMapData);
+              } else {
+                // If fetch fails, fall back to original data
+                console.warn(
+                  "Failed to fetch map details, using existing map data"
+                );
+                const partyWithMapData = {
+                  ...party,
+                  mapData: mapData,
+                };
+                onStartRace(partyWithMapData);
+              }
+            } catch (err) {
+              console.error(
+                "Error fetching map details before starting race:",
+                err
+              );
+              // Fall back to existing data
+              const partyWithMapData = {
+                ...party,
+                mapData: mapData,
+              };
+              onStartRace(partyWithMapData);
+            }
+          };
+
+          fetchAndStartWithDetails();
         } else {
           // Fallback to just the party
           onStartRace(party);

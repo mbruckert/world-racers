@@ -9,7 +9,7 @@ import multiplayerConnection from "../utils/websocket";
 import { getUserData } from "../utils/auth";
 import MultiplayerVehicle from "./MultiplayerVehicle";
 
-import useSound from 'use-sound';
+import useSound from "use-sound";
 
 import startSound from "../assets/start_sound.mp3";
 
@@ -81,7 +81,7 @@ export default function RaceView({
   const [userData] = useState(getUserData());
   const multiplayerVehiclesRef = useRef(new Map());
 
-  const [playStartSound] = useSound(startSound, {playbackRate: 1.1});
+  const [playStartSound] = useSound(startSound, { playbackRate: 1.1 });
 
   // Format checkpoints to ensure they're in [longitude, latitude] format
   const formattedCheckpoints = useMemo(() => {
@@ -275,8 +275,8 @@ export default function RaceView({
   // Start the countdown when both models are loaded
   useEffect(() => {
     if (isMapLoaded && modelLoaded) {
-      playStartSound()
-      // Create audio object outside interval      
+      playStartSound();
+      // Create audio object outside interval
       const timer = setInterval(() => {
         // Play sound before updating countdown
 
@@ -396,10 +396,10 @@ export default function RaceView({
             lightPreset === "night"
               ? "#00ffff" // Brighter cyan for night
               : lightPreset === "dusk"
-                ? "#00c8ff" // Bright blue for dusk
-                : lightPreset === "dawn"
-                  ? "#40a0ff" // Medium blue for dawn
-                  : "#0080ff", // Default blue for day
+              ? "#00c8ff" // Bright blue for dusk
+              : lightPreset === "dawn"
+              ? "#40a0ff" // Medium blue for dawn
+              : "#0080ff", // Default blue for day
           "line-width": 4,
           "line-opacity": 0.9,
           "line-dasharray": [0.1, 2],
@@ -465,10 +465,10 @@ export default function RaceView({
             lightPreset === "night"
               ? "#40c0ff"
               : weather === "rain"
-                ? "#80c0ff"
-                : weather === "snow"
-                  ? "#40a0ff"
-                  : "#0080ff",
+              ? "#80c0ff"
+              : weather === "snow"
+              ? "#40a0ff"
+              : "#0080ff",
           "circle-opacity": 0.7,
           "circle-emissive-strength": 0.5,
           "circle-stroke-width": 1,
@@ -1681,8 +1681,9 @@ export default function RaceView({
                 {checkpointStatus.map((passed, index) => (
                   <div
                     key={index}
-                    className={`w-4 h-4 rounded-full ${passed ? "bg-green-500" : "bg-gray-500"
-                      }`}
+                    className={`w-4 h-4 rounded-full ${
+                      passed ? "bg-green-500" : "bg-gray-500"
+                    }`}
                     title={`Checkpoint ${index + 1}`}
                   ></div>
                 ))}
