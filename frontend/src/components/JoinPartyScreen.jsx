@@ -3,32 +3,45 @@ import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Environment } from "@react-three/drei";
 import GlobeModel from "./GlobeModel";
 import logo from "../assets/logo.png";
-import { register, fetchUserData } from "../utils/auth";
+import { fetchWithAuth, getAuthData } from "../utils/auth";
 
-export default function AuthScreen({ onAuthenticated }) {
-  const [name, setName] = useState("");
+export default function JoinPartyScreen({ onJoined, onCancel }) {
+  const [code, setCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!name.trim()) {
-      setError("Please enter your name");
+    if (!code.trim()) {
+      setError("Please enter a party code");
       return;
     }
 
     try {
-      setError("");
       setIsLoading(true);
+      setError("");
 
-      // Register user
-      const authData = await register(name.trim());
+      // Use the join party endpoint
+      const response = await fetchWithAuth(`/parties/join`, {
+        method: "POST",
+        body: JSON.stringify({
+          code: code.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Invalid party code. Please check and try again.");
+      }
+
+      const joinedPartyData = await response.json();
 
       // Notify parent component
-      onAuthenticated(authData);
+      if (onJoined) {
+        onJoined(joinedPartyData);
+      }
     } catch (err) {
-      setError(err.message || "Failed to authenticate. Please try again.");
+      setError(err.message || "Failed to join party. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -59,9 +72,7 @@ export default function AuthScreen({ onAuthenticated }) {
         />
 
         <div className="w-[300px] mx-auto mt-6">
-          <h2 className="text-white text-lg font-semibold mb-2">
-            Enter Your Name
-          </h2>
+          <h2 className="text-white text-lg font-semibold mb-2">Join Race</h2>
 
           {error && (
             <div className="bg-red-500 text-white px-3 py-2 rounded-lg mb-4">
@@ -73,9 +84,9 @@ export default function AuthScreen({ onAuthenticated }) {
             <div className="bg-white bg-opacity-80 px-4 py-3 rounded-xl flex items-center shadow-md space-x-2">
               <input
                 type="text"
-                placeholder="Your Name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                placeholder="Enter Party Code"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
                 className="flex-grow px-3 py-2 rounded-lg bg-white text-black font-semibold focus:outline-none"
                 disabled={isLoading}
               />
@@ -126,6 +137,13 @@ export default function AuthScreen({ onAuthenticated }) {
               </button>
             </div>
           </form>
+
+          <button
+            onClick={onCancel}
+            className="mt-6 w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 rounded-xl shadow-lg transition"
+          >
+            Cancel
+          </button>
         </div>
       </div>
     </div>

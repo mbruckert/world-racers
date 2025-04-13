@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
-import { fetchWithAuth } from "../utils/auth";
+import { fetchWithAuth, getUserData, fetchUserData } from "../utils/auth";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_API_KEY;
 
@@ -20,10 +20,26 @@ export default function MapBuilderExtended({ onRouteSubmit }) {
   const [timeOfDay, setTimeOfDay] = useState("day");
   const [weather, setWeather] = useState("clear");
   const [isSaving, setIsSaving] = useState(false);
+  const [userData, setUserData] = useState(getUserData());
 
   const startMarker = useRef(null);
   const endMarker = useRef(null);
   const checkpointMarkers = useRef([]);
+
+  // Fetch user data if not available
+  useEffect(() => {
+    if (!userData.id) {
+      const getUserInfo = async () => {
+        try {
+          const data = await fetchUserData();
+          setUserData(data);
+        } catch (err) {
+          console.error("Error fetching user data:", err);
+        }
+      };
+      getUserInfo();
+    }
+  }, [userData.id]);
 
   // Calculate distance between two coordinates in miles using Haversine formula
   const calculateDistance = (coord1, coord2) => {
@@ -181,6 +197,13 @@ export default function MapBuilderExtended({ onRouteSubmit }) {
       return false;
     }
 
+    if (!userData.id) {
+      setError(
+        "User data not available. Please refresh the page and try again."
+      );
+      return false;
+    }
+
     // Check if distance exceeds 2 miles
     const distance = calculateDistance(start, end);
     if (distance > 2) {
@@ -196,8 +219,8 @@ export default function MapBuilderExtended({ onRouteSubmit }) {
       setIsSaving(true);
       setError("");
 
-      // Get author ID from auth data (simplified, you may need to adapt this)
-      const authorId = 1; // This would normally come from the user's profile
+      // Get author ID from user data
+      const authorId = userData.id;
 
       // Format checkpoints for API
       const formattedCheckpoints = checkpoints.map((cp, index) => ({
@@ -317,6 +340,10 @@ export default function MapBuilderExtended({ onRouteSubmit }) {
               Map Details
             </h3>
 
+            {userData?.name && (
+              <p className="text-gray-300 mb-4">Creator: {userData.name}</p>
+            )}
+
             <div className="mb-4">
               <label className="block text-gray-300 mb-2">Title</label>
               <input
@@ -428,9 +455,9 @@ export default function MapBuilderExtended({ onRouteSubmit }) {
           <div className="mt-auto">
             <button
               onClick={handleSubmit}
-              disabled={isSaving}
+              disabled={isSaving || !userData.id}
               className={`w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition flex items-center justify-center gap-2 ${
-                isSaving ? "opacity-70 cursor-not-allowed" : ""
+                isSaving || !userData.id ? "opacity-70 cursor-not-allowed" : ""
               }`}
             >
               {isSaving ? (
