@@ -12,6 +12,8 @@ class MultiplayerConnection {
     this.onDisconnect = null;
     this.onPositionUpdate = null;
     this.onRaceStart = null;
+    this.connectAttempts = 0;
+    this.maxConnectAttempts = 3;
 
     // API URLs
     this.API_BASE_URL = import.meta.env.VITE_API_URL;
@@ -19,14 +21,41 @@ class MultiplayerConnection {
     const wsProtocol = this.API_BASE_URL.startsWith("https") ? "wss" : "ws";
     const apiHost = this.API_BASE_URL.replace(/^https?:\/\//, "");
     this.WS_URL = `${wsProtocol}://${apiHost}/api/ws`;
-    console.log("WebSocket URL:", this.WS_URL);
+    console.log("WebSocket URL configured as:", this.WS_URL);
   }
 
   connect(userId, partyId) {
-    if (this.isConnected) return;
+    // If already connected to the same party, don't reconnect
+    if (
+      this.isConnected &&
+      this.userId === userId &&
+      this.partyId === partyId
+    ) {
+      console.log("Already connected to this party");
+      return;
+    }
+
+    // If connected to a different party, disconnect first
+    if (this.isConnected) {
+      this.disconnect();
+    }
 
     this.userId = userId;
     this.partyId = partyId;
+    this.connectAttempts = 0;
+
+    this.attemptConnection();
+  }
+
+  attemptConnection() {
+    if (this.connectAttempts >= this.maxConnectAttempts) {
+      console.error(
+        `Failed to connect after ${this.maxConnectAttempts} attempts`
+      );
+      return;
+    }
+
+    this.connectAttempts++;
 
     const token = getAuthToken();
     if (!token) {
@@ -34,20 +63,32 @@ class MultiplayerConnection {
       return;
     }
 
-    console.log(`Connecting to WebSocket at ${this.WS_URL} with token`);
+    console.log(
+      `Connecting to WebSocket at ${this.WS_URL} (attempt ${this.connectAttempts})`
+    );
 
-    // Connect to WebSocket with authentication token
-    this.ws = new WebSocket(`${this.WS_URL}?token=${token}`);
+    try {
+      // Connect to WebSocket with authentication token
+      this.ws = new WebSocket(`${this.WS_URL}?token=${token}`);
 
-    this.ws.onopen = this.handleOpen.bind(this);
-    this.ws.onmessage = this.handleMessage.bind(this);
-    this.ws.onerror = this.handleError.bind(this);
-    this.ws.onclose = this.handleClose.bind(this);
+      this.ws.onopen = this.handleOpen.bind(this);
+      this.ws.onmessage = this.handleMessage.bind(this);
+      this.ws.onerror = this.handleError.bind(this);
+      this.ws.onclose = this.handleClose.bind(this);
+    } catch (error) {
+      console.error("Error creating WebSocket:", error);
+
+      // Try to reconnect after a delay
+      setTimeout(() => {
+        this.attemptConnection();
+      }, 2000);
+    }
   }
 
   handleOpen() {
-    console.log("WebSocket connection established");
+    console.log("WebSocket connection established successfully");
     this.isConnected = true;
+    this.connectAttempts = 0;
 
     // Send Connect message
     const connectMessage = {
@@ -125,11 +166,21 @@ class MultiplayerConnection {
     console.error("WebSocket error:", error);
   }
 
-  handleClose() {
-    console.log("WebSocket connection closed");
+  handleClose(event) {
+    console.log(
+      `WebSocket connection closed: code=${event.code}, reason=${event.reason}`
+    );
     this.isConnected = false;
-    this.partyMembers.clear();
-    this.userPositions.clear();
+
+    // Only attempt to reconnect if this wasn't a clean disconnect
+    if (event.code !== 1000 && event.code !== 1001) {
+      console.log("Connection closed unexpectedly, attempting to reconnect...");
+
+      // Try to reconnect after a delay
+      setTimeout(() => {
+        this.attemptConnection();
+      }, 2000);
+    }
   }
 
   sendPosition(position, rotation) {

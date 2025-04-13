@@ -28,10 +28,16 @@ export default function StartScreen({
         setPartyCode(codeFromUrl);
         // Auto-join the party
         handleJoinParty(codeFromUrl);
+
+        // Clear the URL parameter after joining to prevent repeated joins
+        const url = new URL(window.location);
+        url.searchParams.delete("code");
+        window.history.pushState({}, "", url);
       }
     };
 
     autoJoinFromUrl();
+    // Only run this effect once on mount
   }, []);
 
   // Disconnect from any existing WebSocket connection when returning to start screen
