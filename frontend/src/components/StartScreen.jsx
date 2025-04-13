@@ -31,6 +31,7 @@ export default function StartScreen({
       const response = await fetchWithAuth(`/parties/join`, {
         method: "POST",
         body: JSON.stringify({
+          user_id: userData.id,
           code: partyCode.trim(),
         }),
       });
