@@ -34,14 +34,14 @@ class CarPhysics {
             right: false,
         };
 
-        // Physics constants - matching exp_2.html values
+        // Physics constants
         this.physics = {
             baseDragFactor: 0.988,
             baseAcceleration: 0.0003,  // reduced by 70% from 0.002
-            maxAccelerationBonus: 0.0009,  // reduced by 70% from 0.003
-            initialMaxSpeed: 0.0000032, 
-            maxPossibleSpeed: 0.0000064, 
-            maxReverseSpeed: 0.0000016, 
+            maxAccelerationBonus: 0.0003,  // reduced by 70% from 0.003
+            initialMaxSpeed: 0.0000032,
+            maxPossibleSpeed: 0.0000064,
+            maxReverseSpeed: 0.0000016,
             steeringFactorBase: 0.0015,  // reduced from 0.003
             maxSteeringForceBase: 0.05,  // reduced from 0.08
             turnSpeedThreshold: 0.0000007  // increased from 0.0000005
@@ -56,15 +56,6 @@ class CarPhysics {
         this.rotationSpeed = 0;
         this.carRoll = 0;
         this.lastFrame = 0;
-
-        // Legacy car properties (kept for compatibility)
-        this.mass = 1800;
-        this.wheelbase = 2.78;
-        this.enginePower = 100;
-        this.brakingForce = 6000;
-        this.dragCoefficient = 0.35;
-        this.rollingResistance = 8;
-        this.frictionCoefficient = 20;
 
         // Model info
         this.modelLoaded = false;
@@ -279,7 +270,7 @@ class CarPhysics {
         this.prevControls = { ...this.controls };
     }
 
-    handleSteering(dt) {
+    handleSteering() {
         const { steeringFactorBase, maxSteeringForceBase, maxPossibleSpeed, turnSpeedThreshold } = this.physics;
 
         // Improved steering with tighter turning radius at low speeds (matching exp_2.html)
@@ -325,7 +316,7 @@ class CarPhysics {
         this.rotationSpeed *= 0.95;
     }
 
-    applyPhysics(dt) {
+    applyPhysics() {
         // Calculate heading based on rotation speed
         const speedFactor = Math.abs(this.carSpeed) / (this.physics.maxPossibleSpeed / 2);
         this.carHeading += this.rotationSpeed * speedFactor;
@@ -342,7 +333,7 @@ class CarPhysics {
         this.carSpeed *= dragFactor;
     }
 
-    applyRoll(dt) {
+    applyRoll() {
         // Apply car roll when turning, matching exp_2.html implementation
         const rollAmount = -this.rotationSpeed * 8;
         const targetRoll = rollAmount * Math.abs(this.carSpeed / 0.000008);
