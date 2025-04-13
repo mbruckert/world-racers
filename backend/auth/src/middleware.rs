@@ -24,22 +24,17 @@ where
 {
     type Rejection = StatusCode;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         // Get the claims from the request extensions
-        let claims = parts
-            .extensions
-            .get::<Claims>()
-            .ok_or(StatusCode::UNAUTHORIZED)?;
-
         let TypedHeader(Authorization(bearer)) = parts
             .extract::<TypedHeader<Authorization<Bearer>>>()
             .await
             .map_err(|_| StatusCode::UNAUTHORIZED)?;
 
-        let auth = Auth::from_ref(_state);
+        let auth = Auth::from_ref(state);
 
         // Validate the token
-        let claims = match auth.verify_token(&bearer.token()) {
+        let claims = match auth.verify_token(bearer.token()) {
             Ok(claims) => claims,
             Err(_) => return Err(StatusCode::UNAUTHORIZED),
         };
