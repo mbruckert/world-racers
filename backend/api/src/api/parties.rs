@@ -20,6 +20,7 @@ use crate::db::AppState;
 #[derive(Deserialize, ToSchema)]
 pub struct CreatePartyRequest {
     name: String,
+    map_id: i32,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -29,6 +30,7 @@ pub struct PartyResponse {
     code: String,
     owner_id: i32,
     created_at: chrono::DateTime<chrono::FixedOffset>,
+    map_id: i32,
 }
 
 impl From<party::Model> for PartyResponse {
@@ -39,6 +41,7 @@ impl From<party::Model> for PartyResponse {
             code: party.code,
             owner_id: party.owner_id,
             created_at: party.created_at,
+            map_id: party.map_id,
         }
     }
 }
@@ -46,7 +49,6 @@ impl From<party::Model> for PartyResponse {
 #[derive(Deserialize, ToSchema)]
 pub struct JoinPartyRequest {
     code: String,
-    user_id: i32,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -224,6 +226,7 @@ pub async fn create_party(
         name: Set(payload.name),
         code: Set(code),
         owner_id: Set(auth_user.0.sub),
+        map_id: Set(payload.map_id),
         ..Default::default()
     };
 
@@ -267,18 +270,19 @@ pub async fn create_party(
 )]
 pub async fn join_party(
     State(state): State<AppState>,
+    auth_user: AuthUser,
     Json(payload): Json<JoinPartyRequest>,
 ) -> Result<Json<PartyResponse>, (StatusCode, String)> {
     let db = &state.conn;
 
     // Verify user exists
-    let _ = User::find_by_id(payload.user_id)
+    let _ = User::find_by_id(auth_user.0.sub)
         .one(db)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .ok_or((
             StatusCode::BAD_REQUEST,
-            format!("User with id {} not found", payload.user_id),
+            format!("User with id {} not found", auth_user.0.sub),
         ))?;
 
     // Find party by code
@@ -291,7 +295,7 @@ pub async fn join_party(
 
     // Check if user is already a member
     let existing_membership = UserParty::find()
-        .filter(user_party::Column::UserId.eq(payload.user_id))
+        .filter(user_party::Column::UserId.eq(auth_user.0.sub))
         .filter(user_party::Column::PartyId.eq(party.id))
         .one(db)
         .await
@@ -306,7 +310,7 @@ pub async fn join_party(
 
     // Add user to party
     let new_user_party = user_party::ActiveModel {
-        user_id: Set(payload.user_id),
+        user_id: Set(auth_user.0.sub),
         party_id: Set(party.id),
         ..Default::default()
     };
@@ -406,7 +410,7 @@ pub async fn leave_party(
         ))?;
 
     // Check if user is in the party
-    let user_party = UserParty::find()
+    let _ = UserParty::find()
         .filter(user_party::Column::PartyId.eq(party_id))
         .filter(user_party::Column::UserId.eq(user_id))
         .one(db)

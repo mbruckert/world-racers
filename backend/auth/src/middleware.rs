@@ -1,17 +1,13 @@
 use crate::{Auth, Claims};
 use axum::{
     RequestPartsExt,
-    body::{Body, HttpBody},
-    extract::{FromRef, FromRequestParts, State},
+    extract::{FromRef, FromRequestParts},
     http::{StatusCode, request::Parts},
-    middleware::Next,
-    response::Response,
 };
 use axum_extra::{
     TypedHeader,
     headers::{Authorization, authorization::Bearer},
 };
-use http::{Request, header};
 
 // Extractor for authenticated requests
 #[derive(Debug, Clone)]
