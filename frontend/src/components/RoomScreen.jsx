@@ -15,45 +15,13 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
   const [copySuccess, setCopySuccess] = useState(false);
   const [userData, setUserData] = useState(getUserData());
   const [isConnectedToWs, setIsConnectedToWs] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState("disconnected"); // disconnected, connecting, connected, error
+  const [isJoined, setIsJoined] = useState(false);
 
-  // Use derived state for isJoined based on props
-  const [localParty, setLocalParty] = useState(party);
-  const [isJoined, setIsJoined] = useState(!!party);
-
-  // Log props on component mount for debugging
-  useEffect(() => {
-    console.log("RoomScreen rendered with props:", {
-      mapData,
-      party: party ? { ...party, id: party.id } : null,
-      userData: userData ? { ...userData, id: userData.id } : null,
-    });
-
-    // If party is provided via props, use it
-    if (party) {
-      console.log("Party provided via props, setting isJoined to true");
-      setLocalParty(party);
-      setIsJoined(true);
-    }
-  }, []);
-
-  // Update local party state whenever props change
-  useEffect(() => {
-    if (party && (!localParty || party.id !== localParty.id)) {
-      console.log("Party prop changed, updating local state:", party);
-      setLocalParty(party);
-      setIsJoined(true);
-    }
-  }, [party, localParty]);
-
-  // Initialize party from URL only if no party prop is provided
+  // Check if we already have a party from URL params or local storage
   useEffect(() => {
     const checkExistingParty = async () => {
-      // Skip if we already have a party from props or local state
-      if (party || localParty || isJoined) {
-        console.log("Already have party data, skipping URL check");
-        return;
-      }
+      // Skip if we already have a party
+      if (party || isJoined) return;
 
       // Check URL for party ID
       const urlParams = new URLSearchParams(window.location.search);
@@ -62,10 +30,7 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
       if (partyCode && userData.id) {
         try {
           setIsLoading(true);
-          console.log(
-            "Attempting to join party from URL parameter:",
-            partyCode
-          );
+          console.log("Attempting to join party from URL parameter");
 
           // Join the party from URL
           const response = await fetchWithAuth(`/parties/join`, {
@@ -78,8 +43,7 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
 
           if (response.ok) {
             const data = await response.json();
-            console.log("Successfully joined party from URL:", data);
-            setLocalParty(data);
+            setParty(data);
             setIsJoined(true);
 
             // Clear the URL parameter after joining
@@ -96,101 +60,7 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
     };
 
     checkExistingParty();
-  }, [userData.id, party, localParty, isJoined]);
-
-  // Monitor WebSocket connection status
-  useEffect(() => {
-    const checkConnectionStatus = () => {
-      if (!party) {
-        setConnectionStatus("disconnected");
-        return;
-      }
-
-      // Check if we're connected
-      if (multiplayerConnection.isConnected) {
-        setConnectionStatus("connected");
-        setIsConnectedToWs(true);
-      } else {
-        // Not yet connected
-        if (isConnectedToWs) {
-          // We were previously connected but now we're not
-          setConnectionStatus("error");
-        } else {
-          // Still in connecting state
-          setConnectionStatus("connecting");
-        }
-      }
-    };
-
-    // Check initially and then every second
-    checkConnectionStatus();
-    const interval = setInterval(checkConnectionStatus, 1000);
-
-    return () => clearInterval(interval);
-  }, [party, isConnectedToWs]);
-
-  // Render players list with connection status
-  const renderPlayersList = () => {
-    if (members.length === 0) {
-      return (
-        <div className="text-gray-400 py-4 text-center">
-          Waiting for players to join...
-        </div>
-      );
-    }
-
-    return (
-      <ul className="divide-y divide-gray-700">
-        {members.map((member, index) => (
-          <li key={index} className="py-3 flex items-center justify-between">
-            <span className="text-white font-medium">
-              {member.name}
-              {member.id === userData.id && " (You)"}
-            </span>
-            {member.is_owner && (
-              <span className="bg-blue-600 text-xs px-2 py-1 rounded text-white">
-                Host
-              </span>
-            )}
-          </li>
-        ))}
-      </ul>
-    );
-  };
-
-  // Render connection status indicator
-  const renderConnectionStatus = () => {
-    switch (connectionStatus) {
-      case "connected":
-        return (
-          <div className="flex items-center text-sm text-green-400 mt-2">
-            <div className="w-2 h-2 rounded-full bg-green-500 mr-2 animate-pulse"></div>
-            Connected to server
-          </div>
-        );
-      case "connecting":
-        return (
-          <div className="flex items-center text-sm text-yellow-400 mt-2">
-            <div className="w-2 h-2 rounded-full bg-yellow-500 mr-2 animate-pulse"></div>
-            Connecting to server...
-          </div>
-        );
-      case "error":
-        return (
-          <div className="flex items-center text-sm text-red-400 mt-2">
-            <div className="w-2 h-2 rounded-full bg-red-500 mr-2"></div>
-            Connection error
-          </div>
-        );
-      default:
-        return (
-          <div className="flex items-center text-sm text-gray-400 mt-2">
-            <div className="w-2 h-2 rounded-full bg-gray-500 mr-2"></div>
-            Not connected
-          </div>
-        );
-    }
-  };
+  }, [userData.id, party, isJoined]);
 
   // Set up WebSocket handlers for the room
   useEffect(() => {
@@ -210,16 +80,16 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
 
   // Connect to WebSocket when we have a party
   useEffect(() => {
-    if (!localParty || !userData.id || isConnectedToWs) return;
+    if (!party || !userData.id || isConnectedToWs) return;
 
     console.log("Connecting to WebSocket in RoomScreen with:", {
       userId: userData.id,
-      partyId: localParty.id,
-      partyObject: localParty,
+      partyId: party.id,
+      partyObject: party,
     });
 
     // Connect to WebSocket for real-time updates
-    multiplayerConnection.connect(userData.id, localParty.id);
+    multiplayerConnection.connect(userData.id, party.id);
     setIsConnectedToWs(true);
 
     // Set initial party members
@@ -238,7 +108,7 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
       // Don't disconnect here - we want to maintain the connection for the race
       // It will be cleaned up when the user leaves the race or the app
     };
-  }, [localParty, userData.id, isConnectedToWs, members]);
+  }, [party, userData.id, isConnectedToWs, members]);
 
   // Fetch user data if not available
   useEffect(() => {
@@ -257,7 +127,7 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
 
   // Only set up polling for members when we have a party
   useEffect(() => {
-    if (!localParty || !isJoined) return;
+    if (!party || !isJoined) return;
 
     let isMounted = true;
     const fetchMembers = async () => {
@@ -265,9 +135,7 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
         // Skip if component is unmounting or no longer mounted
         if (!isMounted) return;
 
-        const response = await fetchWithAuth(
-          `/parties/${localParty.id}/members`
-        );
+        const response = await fetchWithAuth(`/parties/${party.id}/members`);
         if (response.ok) {
           const data = await response.json();
           if (isMounted) {
@@ -297,11 +165,11 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [localParty, isJoined, isConnectedToWs]);
+  }, [party, isJoined, isConnectedToWs]);
 
   // Start the race
   const handleStartRace = () => {
-    if (onStartRace && localParty) {
+    if (onStartRace && party) {
       // Send race start message to all connected players
       if (multiplayerConnection.isConnected) {
         console.log("Sending StartRace WebSocket message");
@@ -310,22 +178,22 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
         // Give the message a moment to propagate before navigating
         setTimeout(() => {
           console.log("Starting race after WebSocket message sent");
-          onStartRace(localParty);
+          onStartRace(party);
         }, 300);
       } else {
         console.warn(
           "WebSocket not connected, starting race without multiplayer sync"
         );
-        onStartRace(localParty);
+        onStartRace(party);
       }
-    } else if (!localParty) {
+    } else if (!party) {
       setError("Please create a party first");
     }
   };
 
   // Create a party
   const createParty = async () => {
-    if (localParty) return; // Don't create if we already have a party
+    if (party) return; // Don't create if we already have a party
 
     try {
       setIsCreatingParty(true);
@@ -352,7 +220,7 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
       }
 
       const data = await response.json();
-      setLocalParty(data);
+      setParty(data);
       setIsJoined(true);
     } catch (err) {
       setError(err.message || "Failed to create party. Please try again.");
@@ -363,10 +231,10 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
 
   // Copy party code to clipboard
   const copyCodeToClipboard = () => {
-    if (!localParty?.code) return;
+    if (!party?.code) return;
 
     navigator.clipboard
-      .writeText(localParty.code)
+      .writeText(party.code)
       .then(() => {
         setCopySuccess(true);
         setTimeout(() => setCopySuccess(false), 2000);
@@ -378,7 +246,7 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
 
   // Disband the party and cancel
   const handleDisband = async () => {
-    if (!localParty) {
+    if (!party) {
       if (onCancel) {
         onCancel();
       }
@@ -394,7 +262,7 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
         throw new Error("User data not available. Please try again.");
       }
 
-      await fetchWithAuth(`/parties/${localParty.id}/disband`, {
+      await fetchWithAuth(`/parties/${party.id}/disband`, {
         method: "POST",
         body: JSON.stringify({
           owner_id: userId,
@@ -412,7 +280,7 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
   };
 
   // Check if the current user is the owner of the party
-  const isPartyOwner = localParty && userData.id === localParty.owner_id;
+  const isPartyOwner = party && userData.id === party.owner_id;
 
   return (
     <div className="w-screen h-screen bg-gradient-to-b from-[#0f0f2e] to-[#1a1a3f] flex items-center justify-center relative overflow-hidden">
@@ -500,7 +368,7 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
               </p>
               <div className="flex items-center justify-center gap-2 mb-4">
                 <div className="bg-gray-800 px-6 py-3 rounded-lg text-white text-3xl font-mono tracking-wider">
-                  {localParty?.code}
+                  {party?.code}
                 </div>
                 <button
                   onClick={copyCodeToClipboard}
@@ -535,20 +403,40 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
                   )}
                 </button>
               </div>
-
-              {/* Connection status */}
-              {renderConnectionStatus()}
             </div>
           )}
         </div>
 
-        {localParty && (
+        {party && (
           <div className="mb-8">
             <h3 className="text-white text-xl font-semibold mb-4">
               Players in Lobby
             </h3>
             <div className="max-h-48 overflow-y-auto bg-gray-800 bg-opacity-50 rounded-lg p-2">
-              {renderPlayersList()}
+              {members.length > 0 ? (
+                <ul className="divide-y divide-gray-700">
+                  {members.map((member, index) => (
+                    <li
+                      key={index}
+                      className="py-3 flex items-center justify-between"
+                    >
+                      <span className="text-white font-medium">
+                        {member.name}
+                        {member.id === userData.id && " (You)"}
+                      </span>
+                      {member.is_owner && (
+                        <span className="bg-blue-600 text-xs px-2 py-1 rounded text-white">
+                          Host
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-gray-400 py-4 text-center">
+                  Waiting for players to join...
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -561,22 +449,13 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
             } text-white font-semibold rounded-xl shadow-lg transition`}
             disabled={isLoading}
           >
-            {isLoading
-              ? "Processing..."
-              : localParty
-              ? "Disband Party"
-              : "Cancel"}
+            {isLoading ? "Processing..." : party ? "Disband Party" : "Cancel"}
           </button>
 
-          {localParty && (isPartyOwner || !localParty.owner_id) && (
+          {party && (isPartyOwner || !party.owner_id) && (
             <button
               onClick={handleStartRace}
-              disabled={connectionStatus !== "connected"}
-              className={`px-6 py-3 ${
-                connectionStatus === "connected"
-                  ? "bg-green-600 hover:bg-green-700"
-                  : "bg-gray-600 cursor-not-allowed"
-              } text-white font-semibold rounded-xl shadow-lg transition flex items-center gap-2`}
+              className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl shadow-lg transition flex items-center gap-2"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -594,18 +473,6 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
             </button>
           )}
         </div>
-
-        {/* If there's a connection error, display a more visible error alert */}
-        {connectionStatus === "error" && (
-          <div className="mt-4 bg-red-900 bg-opacity-50 text-white p-3 rounded-lg">
-            <p>Error connecting to game server. Please try:</p>
-            <ul className="text-sm list-disc list-inside mt-2">
-              <li>Checking your internet connection</li>
-              <li>Refreshing the page</li>
-              <li>Creating a new party</li>
-            </ul>
-          </div>
-        )}
       </div>
     </div>
   );

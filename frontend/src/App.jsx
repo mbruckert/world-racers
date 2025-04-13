@@ -178,42 +178,8 @@ function App() {
     setFlowState("mapSelect");
   };
 
-  // Ensure WebSocket connection is established whenever we have party data
-  useEffect(() => {
-    if (!party || !party.id || demoMode) return;
-
-    // Get user data for connection
-    const authData = getAuthData();
-    if (!authData?.sub) {
-      console.error("Cannot connect to WebSocket: missing user ID");
-      return;
-    }
-
-    const userId = authData.sub;
-    const partyId = party.id;
-
-    console.log("App: Establishing WebSocket connection for party:", {
-      userId,
-      partyId,
-      party,
-    });
-
-    // Establish connection
-    multiplayerConnection.connect(userId, partyId);
-
-    return () => {
-      // Only disconnect when App unmounts
-      // multiplayerConnection.disconnect();
-    };
-  }, [party, demoMode]);
-
   const handleJoinGame = (partyData) => {
     console.log("Handling join game with data:", partyData);
-
-    if (!partyData) {
-      console.error("No party data provided to handleJoinGame");
-      return;
-    }
 
     // Prevent duplicate party state updates
     if (party && party.id === partyData.id) {
@@ -222,8 +188,6 @@ function App() {
       return;
     }
 
-    // Explicitly log the party data we're setting
-    console.log("Setting party state:", partyData);
     setParty(partyData);
 
     // If demo mode, check for the special demo flag
@@ -257,16 +221,7 @@ function App() {
       // Skip directly to preview
       setFlowState("preview");
     } else {
-      // For regular party, fetch map data immediately
-      if (partyData.id) {
-        console.log("Fetching map data for party:", partyData.id);
-        fetchMapData(partyData.id).catch((error) => {
-          console.error("Error fetching map data:", error);
-        });
-      }
-
       // If a regular party, go to room screen first
-      console.log("Transitioning to room screen with party:", partyData);
       setFlowState("room");
     }
   };
@@ -328,7 +283,6 @@ function App() {
       {flowState === "room" && (
         <RoomScreen
           mapData={selectedMap}
-          party={party}
           onStartRace={handleStartRace}
           onCancel={handleCancelRoom}
         />
