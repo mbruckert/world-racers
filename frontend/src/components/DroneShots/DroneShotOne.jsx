@@ -14,6 +14,13 @@ export default function DroneShotOne({
   locationName = "Unknown Location",
   onAnimationComplete,
 }) {
+  console.log("DroneShotOne received props:", {
+    startPosition,
+    endPosition,
+    checkpointsCount: checkpoints?.length || 0,
+    locationName,
+  });
+
   const mapContainerRef = useRef();
   const mapRef = useRef();
   const [loadingProgress, setLoadingProgress] = useState(0);
@@ -391,7 +398,13 @@ export default function DroneShotOne({
         mapRef.current.remove();
       }
     };
-  }, [startPosition, endPosition, checkpoints, onAnimationComplete, playCourseIntro]);
+  }, [
+    startPosition,
+    endPosition,
+    checkpoints,
+    onAnimationComplete,
+    playCourseIntro,
+  ]);
 
   return (
     <div className="relative w-full h-full">
@@ -408,10 +421,11 @@ export default function DroneShotOne({
         }}
       >
         <div
-          className={`flex flex-col items-start justify-start p-10 transition-all duration-1000 ease-out ${showLocationName
-            ? "opacity-100 translate-y-0"
-            : "opacity-0 -translate-y-10"
-            }`}
+          className={`flex flex-col items-start justify-start p-10 transition-all duration-1000 ease-out ${
+            showLocationName
+              ? "opacity-100 translate-y-0"
+              : "opacity-0 -translate-y-10"
+          }`}
         >
           <div className="flex flex-col">
             <span className="text-blue-300 text-sm font-medium uppercase tracking-widest mb-1">

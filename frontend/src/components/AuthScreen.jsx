@@ -34,21 +34,15 @@ export default function AuthScreen({ onAuthenticated }) {
     }
   };
 
-  useEffect(() => {
-        const script = document.createElement("script");
-        script.src = "https://unpkg.com/@h0rn0chse/night-sky/dist/bundle.min.js";
-        script.async = true;
-        document.body.appendChild(script);
-      
-        return () => {
-          document.body.removeChild(script);
-        };
-      }, []);
-
   return (
-    <div className="w-screen h-screen flex items-center justify-center relative overflow-hidden" style={{ background: `radial-gradient(circle at center,rgb(69, 120, 135) 0%,rgb(57, 91, 141) 20%, #1A1A3F 100%)`}}>
+    <div
+      className="w-screen h-screen flex items-center justify-center relative overflow-hidden"
+      style={{
+        background: `radial-gradient(circle at center,rgb(69, 120, 135) 0%,rgb(57, 91, 141) 20%, #1A1A3F 100%)`,
+      }}
+    >
       {/* Background Canvas for 3D Globe */}
-      <div className="absolute inset-0 z-0 pointer-events-none">
+      {/* <div className="absolute inset-0 z-0 pointer-events-none">
         <Canvas
           className="w-full h-full"
           camera={{ position: [0, 0, 4], fov: 35 }}
@@ -61,16 +55,16 @@ export default function AuthScreen({ onAuthenticated }) {
         </Canvas>
 
         <night-sky
-            id="nightSky"
-            layers="3"
-            density="40"
-            velocity-x="10"
-            velocity-y="10"
-            star-color="#FFF"
-            background-color="transparent"
-            className="absolute inset-0 z-[-1] pointer-events-none"
-         ></night-sky>
-      </div>
+          id="nightSky"
+          layers="3"
+          density="40"
+          velocity-x="10"
+          velocity-y="10"
+          star-color="#FFF"
+          background-color="transparent"
+          className="absolute inset-0 z-[-1] pointer-events-none"
+        ></night-sky>
+      </div> */}
 
       {/* Main UI content */}
       <div className="z-10 text-center">
