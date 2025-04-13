@@ -1056,14 +1056,14 @@ export default function RaceView({
 
     map.on("load", () => {
       // Add fog for view distance optimization
-      map.setFog({
+      /*map.setFog({
         color: "rgb(220, 220, 230)", // Light fog color
         "high-color": "rgb(180, 180, 200)", // Sky color
         "horizon-blend": 0.2, // Smooth transition between fog and sky
         "space-color": "rgb(140, 150, 180)", // Upper atmosphere
         "star-intensity": 0.15, // Slight star visibility
         range: [4, 8], // Start and end distances for fog effect (in km)
-      });
+      });*/
 
       // (Optional) 3D buildings if the style has a "composite" source
       if (map.getSource("composite")) {
