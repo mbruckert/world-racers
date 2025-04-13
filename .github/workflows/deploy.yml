@@ -32,8 +32,8 @@ jobs:
             echo "Deploying version: $VERSION"
             
             # Build and restart with docker compose
-            docker compose -f docker-compose.yaml -f docker-compose.prod.yaml down
             docker compose -f docker-compose.yaml -f docker-compose.prod.yaml build --no-cache
+            docker compose -f docker-compose.yaml -f docker-compose.prod.yaml down
             docker compose -f docker-compose.yaml -f docker-compose.prod.yaml up -d
             
             # Optional: Clean up old images to save space

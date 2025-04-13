@@ -1,61 +1,25 @@
+use crate::{Auth, Claims};
 use axum::{
-    body::Body,
+    RequestPartsExt,
+    body::{Body, HttpBody},
     extract::{FromRef, FromRequestParts, State},
     http::{StatusCode, request::Parts},
     middleware::Next,
     response::Response,
 };
+use axum_extra::{
+    TypedHeader,
+    headers::{Authorization, authorization::Bearer},
+};
 use http::{Request, header};
 
-use crate::{Auth, Claims};
-
-// Extract the JWT from the Authorization header and validate it
-pub async fn auth_middleware<B, S>(
-    State(state): State<S>,
-    mut req: Request<B>,
-    next: Next,
-) -> Result<Response, StatusCode>
-where
-    Auth: FromRef<S>,
-{
-    // Extract the JWT from the Authorization header
-    let auth_header = req
-        .headers()
-        .get(header::AUTHORIZATION)
-        .and_then(|header| header.to_str().ok())
-        .and_then(|value| {
-            if value.starts_with("Bearer ") {
-                Some(value[7..].to_owned())
-            } else {
-                None
-            }
-        });
-
-    let token = match auth_header {
-        Some(token) => token,
-        None => return Err(StatusCode::UNAUTHORIZED),
-    };
-    let auth = Auth::from_ref(&state);
-
-    // Validate the token
-    let claims = match auth.verify_token(&token) {
-        Ok(claims) => claims,
-        Err(_) => return Err(StatusCode::UNAUTHORIZED),
-    };
-
-    // Store the claims in the request extensions so handlers can access them
-    req.extensions_mut().insert(claims);
-
-    // Pass the request to the next handler
-    let response = next.run(req.map(|_| Body::empty())).await;
-    Ok(response)
-}
-
 // Extractor for authenticated requests
+#[derive(Debug, Clone)]
 pub struct AuthUser(pub Claims);
 
 impl<S> FromRequestParts<S> for AuthUser
 where
+    Auth: FromRef<S>,
     S: Send + Sync,
 {
     type Rejection = StatusCode;
@@ -67,8 +31,21 @@ where
             .get::<Claims>()
             .ok_or(StatusCode::UNAUTHORIZED)?;
 
+        let TypedHeader(Authorization(bearer)) = parts
+            .extract::<TypedHeader<Authorization<Bearer>>>()
+            .await
+            .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+        let auth = Auth::from_ref(_state);
+
+        // Validate the token
+        let claims = match auth.verify_token(&bearer.token()) {
+            Ok(claims) => claims,
+            Err(_) => return Err(StatusCode::UNAUTHORIZED),
+        };
+
         // Return the claims
-        Ok(AuthUser(claims.clone()))
+        Ok(AuthUser(claims))
     }
 }
 

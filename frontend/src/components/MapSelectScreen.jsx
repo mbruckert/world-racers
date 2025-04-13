@@ -1,40 +1,28 @@
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
+import { fetchWithAuth } from "../utils/auth";
 
 export default function MapSelectScreen({ onCreateNew, onSelectMap }) {
   const [maps, setMaps] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [isFetched, setIsFetched] = useState(false);
 
   useEffect(() => {
-    fetchMaps();
-  }, []);
+    // Only fetch maps once when the component mounts
+    if (!isFetched) {
+      fetchMaps();
+    }
+  }, [isFetched]);
 
   const fetchMaps = async () => {
+    if (isFetched) return;
+
     try {
       setIsLoading(true);
       setError("");
 
-      // Get auth token from localStorage
-      const authData = JSON.parse(
-        localStorage.getItem("worldracers_auth") || "{}"
-      );
-      const token = authData.access_token;
-
-      if (!token) {
-        throw new Error("Authentication required");
-      }
-
-      const response = await fetch(
-        "https://worldracers.warrensnipes.dev/api/maps",
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const response = await fetchWithAuth("/maps");
 
       if (!response.ok) {
         throw new Error("Failed to fetch maps");
@@ -42,6 +30,7 @@ export default function MapSelectScreen({ onCreateNew, onSelectMap }) {
 
       const mapsData = await response.json();
       setMaps(mapsData);
+      setIsFetched(true);
     } catch (err) {
       setError(err.message || "Failed to load maps. Please try again.");
     } finally {
@@ -49,12 +38,42 @@ export default function MapSelectScreen({ onCreateNew, onSelectMap }) {
     }
   };
 
+  const handleRefresh = () => {
+    setIsFetched(false);
+    fetchMaps();
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#0f0f2e] to-[#1a1a3f] py-10 px-4">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold text-white mb-8 text-center">
-          Select a Map
-        </h1>
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-3xl font-bold text-white">Select a Map</h1>
+          <button
+            onClick={handleRefresh}
+            disabled={isLoading}
+            className="bg-blue-700 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-1 disabled:opacity-50"
+          >
+            {isLoading ? (
+              <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-1"></div>
+            ) : (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+                className="w-5 h-5"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
+                />
+              </svg>
+            )}
+            Refresh
+          </button>
+        </div>
 
         {error && (
           <div className="bg-red-500 text-white px-4 py-3 rounded-lg mb-6 text-center">

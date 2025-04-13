@@ -1,10 +1,77 @@
+import { useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Environment } from "@react-three/drei";
 import GlobeModel from "./GlobeModel";
 import logo from "../assets/logo.png";
+import { useEffect } from "react";
 
-export default function StartScreen({ handleBypass, handleCreateGame }) {
-  return (
+import { fetchWithAuth, getUserData } from "../utils/auth";
+
+export default function StartScreen({
+  handleBypass,
+  handleCreateGame,
+  handleJoinGame,
+}) {
+  const [partyCode, setPartyCode] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
+  const [error, setError] = useState("");
+  const [userData] = useState(getUserData());
+
+  const handleJoinClick = async () => {
+    if (!partyCode.trim()) {
+      setError("Please enter a party code");
+      return;
+    }
+
+    try {
+      setIsJoining(true);
+      setError("");
+
+      // Join directly using the party code
+      const response = await fetchWithAuth(`/parties/join`, {
+        method: "POST",
+        body: JSON.stringify({
+          code: partyCode.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Invalid party code. Please check and try again.");
+      }
+
+      const joinedPartyData = await response.json();
+
+      // Call the handler with the joined party data
+      if (handleJoinGame) {
+        handleJoinGame(joinedPartyData);
+      }
+    } catch (err) {
+      setError(err.message || "Failed to join party. Please try again.");
+    } finally {
+      setIsJoining(false);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") {
+      handleJoinClick();
+    }
+  };
+
+  
+   useEffect(() => {
+      const script = document.createElement("script");
+      script.src = "https://unpkg.com/@h0rn0chse/night-sky/dist/bundle.min.js";
+      script.async = true;
+      document.body.appendChild(script);
+    
+      return () => {
+        document.body.removeChild(script);
+      };
+    }, []);
+    
+  
+   return (
     <div className="w-screen h-screen bg-gradient-to-b from-[#0f0f2e] to-[#1a1a3f] flex items-center justify-center relative overflow-hidden">
       {/* Background Canvas for 3D Globe */}
       <div className="absolute inset-0 z-0 pointer-events-none">
@@ -18,6 +85,17 @@ export default function StartScreen({ handleBypass, handleCreateGame }) {
           <OrbitControls enableZoom={false} enablePan={false} autoRotate />
           <Environment preset="sunset" />
         </Canvas>
+         <night-sky
+            id="nightSky"
+            layers="3"
+            density="40"
+            velocity-x="10"
+            velocity-y="10"
+            star-color="#FFF"
+            background-color="transparent"
+            className="absolute inset-0 z-[-1] pointer-events-none"
+         ></night-sky>
+
       </div>
 
       {/* Main UI content */}
@@ -31,30 +109,67 @@ export default function StartScreen({ handleBypass, handleCreateGame }) {
         {/* Wrap input + button + second button in a shared container */}
         <div className="w-[300px] mx-auto mt-6">
           <h2 className="text-white text-lg font-semibold mb-2">Join Game</h2>
+
+          {error && (
+            <div className="bg-red-500 text-white px-3 py-2 rounded-lg mb-4 text-sm">
+              {error}
+            </div>
+          )}
+
           <div className="bg-white bg-opacity-80 px-4 py-3 rounded-xl flex items-center shadow-md space-x-2">
             <input
               type="text"
               placeholder="Enter Code"
+              value={partyCode}
+              onChange={(e) => setPartyCode(e.target.value)}
+              onKeyDown={handleKeyDown}
               className="flex-grow px-3 py-2 rounded-lg bg-white text-black font-semibold focus:outline-none"
+              disabled={isJoining}
             />
             <button
-              className="bg-blue-800 hover:bg-blue-700 text-white p-2 rounded-lg transition"
-              onClick={() => {}}
+              className={`bg-blue-800 hover:bg-blue-700 text-white p-2 rounded-lg transition ${
+                isJoining ? "opacity-70" : ""
+              }`}
+              onClick={handleJoinClick}
+              disabled={isJoining}
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-                stroke="currentColor"
-                className="size-6"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5"
-                />
-              </svg>
+              {isJoining ? (
+                <svg
+                  className="animate-spin h-6 w-6"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+              ) : (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
+                  stroke="currentColor"
+                  className="size-6"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5"
+                  />
+                </svg>
+              )}
             </button>
           </div>
 
@@ -77,7 +192,7 @@ export default function StartScreen({ handleBypass, handleCreateGame }) {
             Create New Game
           </button>
 
-          {handleBypass && (
+          {/* {handleBypass && (
             <button
               className="mt-6 w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 transition"
               onClick={() => {
@@ -86,6 +201,22 @@ export default function StartScreen({ handleBypass, handleCreateGame }) {
             >
               Bypass (Dev Only)
             </button>
+          )} */}
+
+          {userData?.name && (
+            <p className="text-white text-sm mt-6">
+              Logged in as {userData.name} &nbsp;{" "}
+              <span
+                className="underline cursor-pointer"
+                onClick={() => {
+                  localStorage.removeItem("worldracers_auth");
+                  localStorage.removeItem("worldracers_users");
+                  window.location.reload();
+                }}
+              >
+                Sign Out
+              </span>
+            </p>
           )}
         </div>
       </div>

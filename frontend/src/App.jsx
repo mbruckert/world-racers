@@ -7,7 +7,9 @@ import RaceView from "./components/RaceView";
 import StartScreen from "./components/StartScreen";
 import AuthScreen from "./components/AuthScreen";
 import MapSelectScreen from "./components/MapSelectScreen";
-import { isAuthenticated, getAuthData } from "./utils/auth";
+import RoomScreen from "./components/RoomScreen";
+import JoinPartyScreen from "./components/JoinPartyScreen";
+import { isAuthenticated, getAuthData, fetchWithAuth } from "./utils/auth";
 
 function App() {
   const [startPosition, setStartPosition] = useState(null);
@@ -16,9 +18,10 @@ function App() {
   const [locationName, setLocationName] = useState("");
   const [timeOfDay, setTimeOfDay] = useState("day");
   const [weather, setWeather] = useState("clear");
-  const [flowState, setFlowState] = useState("start"); // auth, mapSelect, building, preview, racing
+  const [flowState, setFlowState] = useState("start"); // auth, start, mapSelect, building, preview, racing, room, joinParty
   const [error, setError] = useState("");
   const [selectedMap, setSelectedMap] = useState(null);
+  const [party, setParty] = useState(null);
 
   // Check authentication on mount
   useEffect(() => {
@@ -62,11 +65,9 @@ function App() {
     setLocationName(location || "");
     setTimeOfDay(time || "day");
     setWeather(weatherCondition || "clear");
-    setFlowState("preview");
-  };
 
-  const handlePreviewComplete = () => {
-    setFlowState("racing");
+    // Go to room creation instead of preview
+    setFlowState("room");
   };
 
   const handleSelectMap = (map) => {
@@ -88,7 +89,20 @@ function App() {
     }
 
     setLocationName(map.title || "");
+
+    // Go to room creation instead of preview
+    setFlowState("room");
+  };
+
+  const handleStartRace = (partyData) => {
+    setParty(partyData);
+    // Go to preview before racing
     setFlowState("preview");
+  };
+
+  const handlePreviewComplete = () => {
+    // After preview completes, go to racing
+    setFlowState("racing");
   };
 
   const resetFlow = () => {
@@ -106,12 +120,56 @@ function App() {
     setFlowState("mapSelect");
   };
 
+  const handlePartyJoined = async (partyData) => {
+    setParty(partyData);
+
+    try {
+      // Fetch map data for joined party
+      const response = await fetchWithAuth(`/parties/${partyData.id}/map`);
+
+      if (response.ok) {
+        const mapData = await response.json();
+
+        // Set map data
+        setSelectedMap(mapData);
+        setStartPosition([mapData.start_longitude, mapData.start_latitude]);
+        setEndPosition([mapData.end_longitude, mapData.end_latitude]);
+
+        if (mapData.checkpoints && Array.isArray(mapData.checkpoints)) {
+          const formattedCheckpoints = mapData.checkpoints.map((cp) => [
+            cp.longitude,
+            cp.latitude,
+          ]);
+          setCheckpoints(formattedCheckpoints);
+        } else {
+          setCheckpoints([]);
+        }
+
+        setLocationName(mapData.title || "");
+      }
+    } catch (err) {
+      console.error("Error fetching map data:", err);
+      // Continue even if map data fetch fails
+    }
+
+    // Go to preview before racing
+    setFlowState("preview");
+  };
+
   const handleCreateNewMap = () => {
     setFlowState("building");
   };
 
   const handleBypass = () => {
     setFlowState("building");
+  };
+
+  const handleCancelRoom = () => {
+    setFlowState("mapSelect");
+  };
+
+  const handleCancelJoin = () => {
+    setFlowState("start");
   };
 
   return (
@@ -130,6 +188,14 @@ function App() {
         <StartScreen
           handleBypass={handleBypass}
           handleCreateGame={handleCreateGame}
+          handleJoinGame={handlePartyJoined}
+        />
+      )}
+
+      {flowState === "joinParty" && (
+        <JoinPartyScreen
+          onJoined={handlePartyJoined}
+          onCancel={handleCancelJoin}
         />
       )}
 
@@ -142,6 +208,14 @@ function App() {
 
       {flowState === "building" && (
         <MapBuilderExtended onRouteSubmit={handleRouteSubmit} />
+      )}
+
+      {flowState === "room" && (
+        <RoomScreen
+          mapData={selectedMap}
+          onStartRace={handleStartRace}
+          onCancel={handleCancelRoom}
+        />
       )}
 
       {flowState === "preview" && (
@@ -170,6 +244,7 @@ function App() {
             checkpoints={checkpoints}
             timeOfDay={timeOfDay}
             weather={weather}
+            party={party}
           />
         </div>
       )}
