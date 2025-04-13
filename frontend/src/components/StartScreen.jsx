@@ -1,9 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Environment } from "@react-three/drei";
 import GlobeModel from "./GlobeModel";
 import logo from "../assets/logo.png";
-import { useEffect } from "react";
 
 import { fetchWithAuth, getUserData } from "../utils/auth";
 import multiplayerConnection from "../utils/websocket";
@@ -18,6 +17,23 @@ export default function StartScreen({
   const [error, setError] = useState("");
   const [userData] = useState(getUserData());
 
+  // Check for party code in URL and auto-join
+  useEffect(() => {
+    const autoJoinFromUrl = async () => {
+      // Check URL for party code
+      const urlParams = new URLSearchParams(window.location.search);
+      const codeFromUrl = urlParams.get("code");
+
+      if (codeFromUrl && !isJoining) {
+        setPartyCode(codeFromUrl);
+        // Auto-join the party
+        handleJoinParty(codeFromUrl);
+      }
+    };
+
+    autoJoinFromUrl();
+  }, []);
+
   // Disconnect from any existing WebSocket connection when returning to start screen
   useEffect(() => {
     if (multiplayerConnection.isConnected) {
@@ -25,8 +41,8 @@ export default function StartScreen({
     }
   }, []);
 
-  const handleJoinClick = async () => {
-    if (!partyCode.trim()) {
+  const handleJoinParty = async (code) => {
+    if (!code) {
       setError("Please enter a party code");
       return;
     }
@@ -40,7 +56,7 @@ export default function StartScreen({
         method: "POST",
         body: JSON.stringify({
           user_id: userData.id,
-          code: partyCode.trim(),
+          code: code.trim(),
         }),
       });
 
@@ -51,6 +67,11 @@ export default function StartScreen({
       const joinedPartyData = await response.json();
       console.log("Successfully joined party:", joinedPartyData);
 
+      // Add the party code to the URL for easier navigation
+      const url = new URL(window.location);
+      url.searchParams.set("code", code.trim());
+      window.history.pushState({}, "", url);
+
       // Call the handler with the joined party data
       if (handleJoinGame) {
         handleJoinGame(joinedPartyData);
@@ -60,6 +81,10 @@ export default function StartScreen({
     } finally {
       setIsJoining(false);
     }
+  };
+
+  const handleJoinClick = () => {
+    handleJoinParty(partyCode);
   };
 
   const handleKeyDown = (e) => {

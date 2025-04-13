@@ -41,10 +41,35 @@ function App() {
   // Handle race start WebSocket event
   useEffect(() => {
     // Setup race start handler to sync the race starting across clients
-    multiplayerConnection.onRaceStart = (mapData) => {
-      console.log("Race start event received in App", mapData);
+    multiplayerConnection.onRaceStart = () => {
+      console.log("Race start event received in App");
 
-      if (mapData) {
+      // Go straight to race view - skip the preview for non-host players
+      if (flowState !== "racing") {
+        // If we're in a joined party, we should already have map data
+        // from the party/map endpoint
+        if (party && !demoMode) {
+          // Fetch map data if needed
+          fetchMapData(party.id).catch(console.error);
+        }
+
+        setFlowState("racing");
+      }
+    };
+
+    return () => {
+      // Clean up handler when App unmounts
+      multiplayerConnection.onRaceStart = null;
+    };
+  }, [flowState, party, demoMode]);
+
+  // Function to fetch map data for a joined party
+  const fetchMapData = async (partyId) => {
+    try {
+      const response = await fetchWithAuth(`/parties/${partyId}/map`);
+      if (response.ok) {
+        const mapData = await response.json();
+
         // Set up route data from received map data
         setStartPosition([mapData.start_longitude, mapData.start_latitude]);
         setEndPosition([mapData.end_longitude, mapData.end_latitude]);
@@ -59,18 +84,10 @@ function App() {
 
         setLocationName(mapData.title || "");
       }
-
-      // Go straight to race view - skip the preview for non-host players
-      if (flowState !== "racing") {
-        setFlowState("racing");
-      }
-    };
-
-    return () => {
-      // Clean up handler when App unmounts
-      multiplayerConnection.onRaceStart = null;
-    };
-  }, [flowState]);
+    } catch (error) {
+      console.error("Error fetching map data:", error);
+    }
+  };
 
   const handleAuthenticated = (authData) => {
     console.log("User authenticated:", authData);

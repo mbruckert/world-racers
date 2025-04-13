@@ -15,11 +15,47 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
   const [copySuccess, setCopySuccess] = useState(false);
   const [userData, setUserData] = useState(getUserData());
   const [isConnectedToWs, setIsConnectedToWs] = useState(false);
+  const [isJoined, setIsJoined] = useState(false);
+
+  // Check if we already have a party from URL params or local storage
+  useEffect(() => {
+    const checkExistingParty = async () => {
+      // Check URL for party ID
+      const urlParams = new URLSearchParams(window.location.search);
+      const partyCode = urlParams.get("code");
+
+      if (partyCode) {
+        try {
+          setIsLoading(true);
+          // Join the party from URL
+          const response = await fetchWithAuth(`/parties/join`, {
+            method: "POST",
+            body: JSON.stringify({
+              user_id: userData.id,
+              code: partyCode,
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            setParty(data);
+            setIsJoined(true);
+          }
+        } catch (err) {
+          console.error("Error joining party from URL:", err);
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    checkExistingParty();
+  }, [userData.id]);
 
   // Set up WebSocket handlers for the room
   useEffect(() => {
     // Set up WebSocket race start handler
-    multiplayerConnection.onRaceStart = (mapData) => {
+    multiplayerConnection.onRaceStart = () => {
       console.log("Race starting from WebSocket event!");
       if (onStartRace && party) {
         onStartRace(party);
@@ -71,6 +107,7 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
         if (response.ok) {
           const data = await response.json();
           setMembers(data);
+          setIsJoined(true); // Mark that we're definitely joined if we can fetch members
 
           // Update the party members in the WebSocket connection too
           data.forEach((member) => {
@@ -92,7 +129,23 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
     return () => clearInterval(interval);
   }, [party]);
 
-  // Create a new party
+  // Start the race
+  const handleStartRace = () => {
+    if (onStartRace && party) {
+      // Send race start message to all connected players
+      if (multiplayerConnection.isConnected) {
+        multiplayerConnection.startRace();
+        console.log("Sent StartRace message");
+      }
+
+      // Make sure we're passing the complete party object
+      onStartRace(party);
+    } else if (!party) {
+      setError("Please create a party first");
+    }
+  };
+
+  // Create a party
   const createParty = async () => {
     if (party) return; // Don't create if we already have a party
 
@@ -122,6 +175,7 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
 
       const data = await response.json();
       setParty(data);
+      setIsJoined(true);
     } catch (err) {
       setError(err.message || "Failed to create party. Please try again.");
     } finally {
@@ -142,21 +196,6 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
       .catch(() => {
         setError("Failed to copy code");
       });
-  };
-
-  // Start the race
-  const handleStartRace = () => {
-    if (onStartRace && party) {
-      // Send race start message to all connected players
-      if (multiplayerConnection.isConnected) {
-        multiplayerConnection.startRace(mapData);
-      }
-
-      // Make sure we're passing the complete party object
-      onStartRace(party);
-    } else if (!party) {
-      setError("Please create a party first");
-    }
   };
 
   // Disband the party and cancel
@@ -198,7 +237,7 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
   const isPartyOwner = party && userData.id === party.owner_id;
 
   return (
-    <div className="w-screen h-screen bg-gradient-to-b from-[#1a1a3f] to-[#46628C] flex items-center justify-center relative overflow-hidden">
+    <div className="w-screen h-screen bg-gradient-to-b from-[#0f0f2e] to-[#1a1a3f] flex items-center justify-center relative overflow-hidden">
       {/* Background Canvas for 3D Globe */}
       <div className="absolute inset-0 z-0 pointer-events-none">
         <Canvas
@@ -238,7 +277,7 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
             </p>
           )}
 
-          {!party ? (
+          {!isJoined ? (
             <div className="my-8">
               <p className="text-white mb-4">
                 Create a party to invite friends to your race!
@@ -283,7 +322,7 @@ export default function RoomScreen({ mapData, onStartRace, onCancel }) {
               </p>
               <div className="flex items-center justify-center gap-2 mb-4">
                 <div className="bg-gray-800 px-6 py-3 rounded-lg text-white text-3xl font-mono tracking-wider">
-                  {party.code}
+                  {party?.code}
                 </div>
                 <button
                   onClick={copyCodeToClipboard}

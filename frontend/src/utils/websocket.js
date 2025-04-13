@@ -57,6 +57,7 @@ class MultiplayerConnection {
   handleMessage(event) {
     try {
       const message = JSON.parse(event.data);
+      console.log("Received WebSocket message:", message);
 
       switch (message.type) {
         case "NewPartyMember":
@@ -98,10 +99,10 @@ class MultiplayerConnection {
           }
           break;
 
-        case "RaceStart":
+        case "RaceStarted":
           console.log("Race start message received!");
           if (this.onRaceStart) {
-            this.onRaceStart(message.map_data);
+            this.onRaceStart();
           }
           break;
 
@@ -187,14 +188,11 @@ class MultiplayerConnection {
     return this.userPositions;
   }
 
-  startRace(mapData) {
+  startRace() {
     if (!this.isConnected) return;
 
     const startMessage = {
-      type: "RaceStart",
-      user_id: this.userId,
-      party_id: this.partyId,
-      map_data: mapData,
+      type: "StartRace",
     };
 
     this.sendMessage(startMessage);

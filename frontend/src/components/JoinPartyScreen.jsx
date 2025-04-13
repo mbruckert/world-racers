@@ -39,6 +39,11 @@ export default function JoinPartyScreen({ onJoined, onCancel }) {
       const joinedPartyData = await response.json();
       console.log("Successfully joined party:", joinedPartyData);
 
+      // Add the party code to the URL for easier navigation
+      const url = new URL(window.location);
+      url.searchParams.set("code", code.trim());
+      window.history.pushState({}, "", url);
+
       // Notify parent component
       if (onJoined) {
         onJoined(joinedPartyData);
