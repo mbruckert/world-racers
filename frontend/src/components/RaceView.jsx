@@ -1029,7 +1029,7 @@ export default function RaceView({
       };
 
       multiplayerConnection.sendPosition(position, rotation);
-    }, 1000); // Send updates 1 times per second
+    }, 100); // Send updates 10 times per second
 
     return () => clearInterval(sendPositionInterval);
   }, [raceStarted]);
