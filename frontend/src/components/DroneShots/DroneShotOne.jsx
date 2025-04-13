@@ -17,10 +17,38 @@ export default function DroneShotOne({
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [showLocationName, setShowLocationName] = useState(false);
 
+  // Format checkpoints to ensure they're in [longitude, latitude] format
+  const formatCheckpoints = () => {
+    return checkpoints
+      .map((checkpoint) => {
+        // If checkpoint is already an array [lng, lat], return as is
+        if (Array.isArray(checkpoint)) {
+          return checkpoint;
+        }
+        // If checkpoint is an object with latitude/longitude properties
+        else if (
+          checkpoint &&
+          typeof checkpoint === "object" &&
+          "longitude" in checkpoint &&
+          "latitude" in checkpoint
+        ) {
+          // Return only the coordinates, ignoring the position property
+          return [checkpoint.longitude, checkpoint.latitude];
+        }
+        // If format is unknown, log error and return null
+        else {
+          console.error("Invalid checkpoint format:", checkpoint);
+          return null;
+        }
+      })
+      .filter((checkpoint) => checkpoint !== null); // Remove any invalid checkpoints
+  };
+
   useEffect(() => {
     // Use provided coordinates or defaults if not available
     const start = startPosition || [-81.1989, 28.6024];
     const end = endPosition || [-81.195, 28.605];
+    const formattedCheckpoints = formatCheckpoints();
 
     // Calculate center point between start and end for initial view
     const centerLng = (start[0] + end[0]) / 2;
@@ -80,8 +108,8 @@ export default function DroneShotOne({
       const waypoints = [start];
 
       // Add all checkpoints in their original order
-      if (checkpoints && checkpoints.length > 0) {
-        waypoints.push(...checkpoints);
+      if (formattedCheckpoints && formattedCheckpoints.length > 0) {
+        waypoints.push(...formattedCheckpoints);
       }
 
       // Add end position as the last point
@@ -91,8 +119,8 @@ export default function DroneShotOne({
       new mapboxgl.Marker({ color: "#00FF00" }).setLngLat(start).addTo(map);
 
       // Add checkpoint markers
-      if (checkpoints && checkpoints.length > 0) {
-        checkpoints.forEach((checkpoint, index) => {
+      if (formattedCheckpoints && formattedCheckpoints.length > 0) {
+        formattedCheckpoints.forEach((checkpoint, index) => {
           // Create a DOM element for the marker
           const el = document.createElement("div");
           el.className = "checkpoint-marker";
@@ -226,89 +254,6 @@ export default function DroneShotOne({
 
       // Using the same animation steps but with smoother transitions and optimized altitude values
       const animations = [
-        {
-          duration: 5000.0,
-          animate: (phase) => {
-            const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
-            // More dramatic and closer first shot - very close to course
-
-            // Reduced side offset to stay closer to route
-            const sideOffset = 0.0015; // Half the previous value
-            const curveAmount = Math.sin(phase * Math.PI) * 0.001;
-
-            // Position almost on the route
-            const position = [
-              start[0] +
-                perpVector[0] * (1 - phase) * sideOffset +
-                normalizedDirection[0] * phase * 0.05,
-              start[1] +
-                perpVector[1] * (1 - phase) * sideOffset +
-                normalizedDirection[1] * phase * 0.05 +
-                curveAmount,
-            ];
-
-            // Much lower altitude to focus on course
-            const altitude = lerp(250.0, 150.0, easeOutCubic(phase));
-
-            // Target directly on route
-            const lookAheadAmount = 0.003 * phase;
-            const target = [
-              start[0] + normalizedDirection[0] * lookAheadAmount,
-              start[1] + normalizedDirection[1] * lookAheadAmount,
-            ];
-
-            updateCameraPosition(position, altitude, target);
-          },
-          prevPosition: null,
-          prevAltitude: null,
-          prevTarget: null,
-        },
-        {
-          duration: 6000.0,
-          animate: (phase) => {
-            // Smoother flyover with stabilized camera movement
-
-            // Apply bezier easing for smoother acceleration/deceleration
-            const easeInOutCubic = (t) =>
-              t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-            const easedPhase = easeInOutCubic(phase);
-
-            // Get position almost on the course with minimal drift
-            const drift = Math.sin(phase * Math.PI * 2) * 0.0003;
-            const position = [
-              start[0] +
-                directionVector[0] * easedPhase +
-                perpVector[0] * drift,
-              start[1] +
-                directionVector[1] * easedPhase +
-                perpVector[1] * drift,
-            ];
-
-            // Tight focus on course ahead
-            const lookAheadBase = 0.01;
-            const lookAheadVariable = Math.sin(phase * Math.PI) * 0.01;
-            const lookAheadFactor = Math.max(
-              0.005,
-              lookAheadBase + lookAheadVariable
-            );
-
-            const target = [
-              position[0] + normalizedDirection[0] * lookAheadFactor,
-              position[1] + normalizedDirection[1] * lookAheadFactor,
-            ];
-
-            // Very low altitude to focus directly on course
-            const baseAltitude = 180; // Even lower than before
-            const altitudeVariation = 20;
-            const altitude =
-              baseAltitude + Math.sin(phase * Math.PI * 3) * altitudeVariation;
-
-            updateCameraPosition(position, altitude, target);
-          },
-          prevPosition: null,
-          prevAltitude: null,
-          prevTarget: null,
-        },
         {
           duration: 5000.0,
           animate: (phase) => {

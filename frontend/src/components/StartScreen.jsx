@@ -58,22 +58,96 @@ export default function StartScreen({
     }
   };
 
-  
-   useEffect(() => {
-      const script = document.createElement("script");
-      script.src = "https://unpkg.com/@h0rn0chse/night-sky/dist/bundle.min.js";
-      script.async = true;
-      document.body.appendChild(script);
-    
-      return () => {
-        document.body.removeChild(script);
+  // Washington DC demo map data
+  const dcMapData = {
+    author_id: 16,
+    title: "Washington DC 2",
+    description: "A race in Washington",
+    start_latitude: 38.892631834527975,
+    start_longitude: -77.03660918554066,
+    end_latitude: 38.897425244477745,
+    end_longitude: -77.03658837865198,
+    checkpoints: [
+      {
+        latitude: 38.89279377933346,
+        longitude: -77.03567287553109,
+        position: 1,
+      },
+      {
+        latitude: 38.89324722282504,
+        longitude: -77.03490302063344,
+        position: 2,
+      },
+      {
+        latitude: 38.89420268356227,
+        longitude: -77.03465333796434,
+        position: 3,
+      },
+      {
+        latitude: 38.89491522218546,
+        longitude: -77.03527754463792,
+        position: 4,
+      },
+      {
+        latitude: 38.895174325366696,
+        longitude: -77.03654676487378,
+        position: 5,
+      },
+      {
+        latitude: 38.896194534954844,
+        longitude: -77.03509028263568,
+        position: 6,
+      },
+      {
+        latitude: 38.89680989238235,
+        longitude: -77.03575610308745,
+        position: 7,
+      },
+      {
+        latitude: 38.8973604708242,
+        longitude: -77.0361930477588,
+        position: 8,
+      },
+    ],
+  };
+
+  const handleDemoRace = () => {
+    if (handleJoinGame) {
+      // Create a mock party object with the DC map data
+      const demoParty = {
+        id: "demo-dc",
+        name: "Washington DC Demo",
+        map_id: "dc-demo",
+        isGuestMode: true, // Special flag for guest mode
+        // Add any other required party properties
       };
-    }, []);
-    
-  
-   return (
-    <div className="w-screen h-screen  flex items-center justify-center relative overflow-hidden"
-      style={{ background: `radial-gradient(circle at center,rgb(69, 120, 135) 0%,rgb(57, 91, 141) 20%, #1A1A3F 100%)`}}>
+
+      // Pass both the party and map data via the join handler
+      handleJoinGame({
+        ...demoParty,
+        mapData: dcMapData,
+      });
+    }
+  };
+
+  useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "https://unpkg.com/@h0rn0chse/night-sky/dist/bundle.min.js";
+    script.async = true;
+    document.body.appendChild(script);
+
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
+
+  return (
+    <div
+      className="w-screen h-screen  flex items-center justify-center relative overflow-hidden"
+      style={{
+        background: `radial-gradient(circle at center,rgb(69, 120, 135) 0%,rgb(57, 91, 141) 20%, #1A1A3F 100%)`,
+      }}
+    >
       {/* Background Canvas for 3D Globe */}
       <div className="absolute inset-0 z-0 pointer-events-none">
         <Canvas
@@ -86,17 +160,16 @@ export default function StartScreen({
           <OrbitControls enableZoom={false} enablePan={false} autoRotate />
           <Environment preset="sunset" />
         </Canvas>
-         <night-sky
-            id="nightSky"
-            layers="3"
-            density="40"
-            velocity-x="10"
-            velocity-y="10"
-            star-color="#FFF"
-            background-color="transparent"
-            className="absolute inset-0 z-[-1] pointer-events-none"
-         ></night-sky>
-
+        <night-sky
+          id="nightSky"
+          layers="3"
+          density="40"
+          velocity-x="10"
+          velocity-y="10"
+          star-color="#FFF"
+          background-color="transparent"
+          className="absolute inset-0 z-[-1] pointer-events-none"
+        ></night-sky>
       </div>
 
       {/* Main UI content */}
@@ -193,16 +266,25 @@ export default function StartScreen({
             Create New Game
           </button>
 
-          {/* {handleBypass && (
-            <button
-              className="mt-6 w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 transition"
-              onClick={() => {
-                handleBypass();
-              }}
+          {/* Demo Race Button */}
+          <button
+            className="mt-4 w-full bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800 text-white font-semibold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2 transition"
+            onClick={handleDemoRace}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className="w-6 h-6"
             >
-              Bypass (Dev Only)
-            </button>
-          )} */}
+              <path
+                fillRule="evenodd"
+                d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653Z"
+                clipRule="evenodd"
+              />
+            </svg>
+            Demo Race: Washington DC
+          </button>
 
           {userData?.name && (
             <p className="text-white text-sm mt-6">

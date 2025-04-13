@@ -5,6 +5,9 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 import CarPhysics from "../car/physics";
+import multiplayerConnection from "../utils/websocket";
+import { getUserData } from "../utils/auth";
+import MultiplayerVehicle from "./MultiplayerVehicle";
 
 // Access token
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_API_KEY;
@@ -44,6 +47,7 @@ export default function RaceView({
   checkpoints = [],
   timeOfDay = "day",
   weather = "clear",
+  partyId = null,
 }) {
   // Remove debug logs
   const mapContainerRef = useRef(null);
@@ -66,6 +70,42 @@ export default function RaceView({
   const [compassDirection, setCompassDirection] = useState(0);
   const [nextTargetName, setNextTargetName] = useState("");
   const [distanceToNextTarget, setDistanceToNextTarget] = useState(0);
+
+  // Add multiplayer state
+  const [otherPlayers, setOtherPlayers] = useState(new Map());
+  const [userData] = useState(getUserData());
+  const multiplayerVehiclesRef = useRef(new Map());
+
+  // Format checkpoints to ensure they're in [longitude, latitude] format
+  const formattedCheckpoints = useMemo(() => {
+    if (!checkpoints || checkpoints.length === 0) {
+      return [];
+    }
+
+    return checkpoints
+      .map((checkpoint) => {
+        // If checkpoint is already an array [lng, lat], return as is
+        if (Array.isArray(checkpoint)) {
+          return checkpoint;
+        }
+        // If checkpoint is an object with latitude/longitude properties
+        else if (
+          checkpoint &&
+          typeof checkpoint === "object" &&
+          "longitude" in checkpoint &&
+          "latitude" in checkpoint
+        ) {
+          // Return only the coordinates, ignoring the position property
+          return [checkpoint.longitude, checkpoint.latitude];
+        }
+        // If format is unknown, log error and return null
+        else {
+          console.error("Invalid checkpoint format:", checkpoint);
+          return null;
+        }
+      })
+      .filter((checkpoint) => checkpoint !== null); // Remove any invalid checkpoints
+  }, [checkpoints]);
 
   // Initialize carPosition from props or default
   const initialPosition = useMemo(() => {
@@ -124,10 +164,10 @@ export default function RaceView({
 
     // Calculate initial heading toward first checkpoint or finish
     let initialHeading = 0;
-    if (checkpoints && checkpoints.length > 0) {
+    if (formattedCheckpoints && formattedCheckpoints.length > 0) {
       // Head toward first checkpoint
-      const dx = checkpoints[0][0] - initialPosition[0];
-      const dy = checkpoints[0][1] - initialPosition[1];
+      const dx = formattedCheckpoints[0][0] - initialPosition[0];
+      const dy = formattedCheckpoints[0][1] - initialPosition[1];
       initialHeading = Math.atan2(dx, dy);
     } else if (actualFinishPosition) {
       // Head toward finish position
@@ -151,12 +191,14 @@ export default function RaceView({
       });
     }
 
-    if (checkpoints && checkpoints.length > 0) {
+    if (formattedCheckpoints && formattedCheckpoints.length > 0) {
       // Create orderedCheckpoints array with properly formatted data
-      const orderedCheckpoints = checkpoints.map((checkpoint, index) => ({
-        position: checkpoint,
-        originalIndex: index,
-      }));
+      const orderedCheckpoints = formattedCheckpoints.map(
+        (checkpoint, index) => ({
+          position: checkpoint,
+          originalIndex: index,
+        })
+      );
       setOptimizedCheckpoints(orderedCheckpoints);
 
       const initialStatus = orderedCheckpoints.map(() => false);
@@ -164,7 +206,7 @@ export default function RaceView({
       carPhysics.current.checkpointsPassed = initialStatus;
     }
   }, [
-    checkpoints,
+    formattedCheckpoints,
     finishPosition,
     defaultFinishPosition,
     actualFinishPosition,
@@ -186,10 +228,10 @@ export default function RaceView({
 
     // Calculate initial heading toward first checkpoint or finish
     let initialHeading = 0;
-    if (checkpoints && checkpoints.length > 0) {
+    if (formattedCheckpoints && formattedCheckpoints.length > 0) {
       // Head toward first checkpoint
-      const dx = checkpoints[0][0] - initialPosition[0];
-      const dy = checkpoints[0][1] - initialPosition[1];
+      const dx = formattedCheckpoints[0][0] - initialPosition[0];
+      const dy = formattedCheckpoints[0][1] - initialPosition[1];
       initialHeading = Math.atan2(dx, dy);
     } else if (actualFinishPosition) {
       // Head toward finish position
@@ -251,8 +293,8 @@ export default function RaceView({
       const waypoints = [initialPosition];
 
       // Add all checkpoints in between in their original order
-      if (checkpoints && checkpoints.length > 0) {
-        waypoints.push(...checkpoints);
+      if (formattedCheckpoints && formattedCheckpoints.length > 0) {
+        waypoints.push(...formattedCheckpoints);
       }
 
       // Add finish position as the last point
@@ -329,20 +371,6 @@ export default function RaceView({
         "route-line"
       ); // Add outline beneath the main line
 
-      // Add a pulsing effect to make the route more noticeable
-      // First, create a pulsing dash pattern based on time
-      const animatedDashArray = [
-        "interpolate",
-        ["linear"],
-        ["%", ["*", 0.5, ["time"]], 1.0],
-        0,
-        [0.1, 2],
-        0.5,
-        [2, 0.1],
-        1,
-        [0.1, 2],
-      ];
-
       // Add animated line on top for extra visibility
       map.addLayer({
         id: "route-pulse",
@@ -353,20 +381,17 @@ export default function RaceView({
           "line-cap": "round",
         },
         paint: {
-          "line-color": [
-            "match",
-            ["string", ["get", "lightPreset", ["config"]]],
-            "night",
-            "#00ffff", // Brighter cyan for night
-            "dusk",
-            "#00c8ff", // Bright blue for dusk
-            "dawn",
-            "#40a0ff", // Medium blue for dawn
-            "#0080ff", // Default blue for day
-          ],
+          "line-color":
+            lightPreset === "night"
+              ? "#00ffff" // Brighter cyan for night
+              : lightPreset === "dusk"
+              ? "#00c8ff" // Bright blue for dusk
+              : lightPreset === "dawn"
+              ? "#40a0ff" // Medium blue for dawn
+              : "#0080ff", // Default blue for day
           "line-width": 4,
           "line-opacity": 0.9,
-          "line-dasharray": animatedDashArray,
+          "line-dasharray": [0.1, 2],
           "line-emissive-strength": 0.8,
         },
       });
@@ -425,31 +450,15 @@ export default function RaceView({
             22,
             5,
           ],
-          "circle-color": [
-            "case",
-            ["==", ["get", "lightPreset", ["config"]], "night"],
-            "#40c0ff",
-            ["==", weather, "rain"],
-            "#80c0ff",
-            ["==", weather, "snow"],
-            "#40a0ff",
-            "#0080ff",
-          ],
-          "circle-opacity": [
-            "interpolate",
-            ["linear"],
-            [
-              "%",
-              ["+", ["*", 0.01, ["get", "index"]], ["*", 0.25, ["time"]]],
-              1,
-            ],
-            0,
-            0.3,
-            0.5,
-            1,
-            1,
-            0.3,
-          ],
+          "circle-color":
+            lightPreset === "night"
+              ? "#40c0ff"
+              : weather === "rain"
+              ? "#80c0ff"
+              : weather === "snow"
+              ? "#40a0ff"
+              : "#0080ff",
+          "circle-opacity": 0.7,
           "circle-emissive-strength": 0.5,
           "circle-stroke-width": 1,
           "circle-stroke-color": "#ffffff",
@@ -507,7 +516,7 @@ export default function RaceView({
         // Add arrows source to map
         map.addSource("route-arrows", arrowsSource);
 
-        // Add symbol layer for arrows
+        // Create a custom arrow symbol rather than loading from external URL
         map.addLayer({
           id: "route-arrows-layer",
           type: "symbol",
@@ -522,15 +531,27 @@ export default function RaceView({
           },
         });
 
-        // Load arrow image
-        map.loadImage(
-          "https://docs.mapbox.com/mapbox-gl-js/assets/arrow.png",
-          (error, image) => {
-            if (error) throw error;
-            map.addImage("arrow", image);
-            map.triggerRepaint();
-          }
-        );
+        // Create our own arrow icon
+        const arrowCanvas = document.createElement("canvas");
+        arrowCanvas.width = 20;
+        arrowCanvas.height = 20;
+        const ctx = arrowCanvas.getContext("2d");
+
+        // Draw a simple arrow
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.moveTo(10, 0); // Top point
+        ctx.lineTo(20, 20); // Bottom right
+        ctx.lineTo(10, 15); // Indent bottom
+        ctx.lineTo(0, 20); // Bottom left
+        ctx.lineTo(10, 0); // Back to top
+        ctx.fill();
+        ctx.strokeStyle = "#0080ff";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Add the arrow image from canvas
+        map.addImage("arrow", ctx.getImageData(0, 0, 20, 20));
       }
 
       // Add start marker
@@ -548,8 +569,8 @@ export default function RaceView({
       new mapboxgl.Marker(startEl).setLngLat(initialPosition).addTo(map);
 
       // Add markers for checkpoints in their original order
-      if (checkpoints && checkpoints.length > 0) {
-        checkpoints.forEach((checkpoint, index) => {
+      if (formattedCheckpoints && formattedCheckpoints.length > 0) {
+        formattedCheckpoints.forEach((checkpoint, index) => {
           // Create a DOM element for the marker
           const el = document.createElement("div");
           el.className = "checkpoint-marker";
@@ -682,15 +703,15 @@ export default function RaceView({
           }, 1000);
         }
       }
-    } else if (checkpoints && checkpoints.length > 0) {
+    } else if (formattedCheckpoints && formattedCheckpoints.length > 0) {
       // Fallback to original checkpoints if optimizedCheckpoints not ready
       let allPassed = true;
 
       const newStatus = [
         ...(carPhysics.current.checkpointsPassed ||
-          Array(checkpoints.length).fill(false)),
+          Array(formattedCheckpoints.length).fill(false)),
       ];
-      checkpoints.forEach((checkpoint, index) => {
+      formattedCheckpoints.forEach((checkpoint, index) => {
         // Check if car is within range of checkpoint
         const distance = carPhysics.current.calculateDistance(
           carPosition,
@@ -798,12 +819,12 @@ export default function RaceView({
     let targetName;
 
     // Find the next uncompleted checkpoint
-    if (checkpoints && checkpoints.length > 0) {
+    if (formattedCheckpoints && formattedCheckpoints.length > 0) {
       const nextCheckpointIndex =
         carPhysics.current.checkpointsPassed.findIndex((passed) => !passed);
       if (nextCheckpointIndex !== -1) {
         // We have a next checkpoint
-        targetPosition = checkpoints[nextCheckpointIndex];
+        targetPosition = formattedCheckpoints[nextCheckpointIndex];
         targetName = `Checkpoint ${nextCheckpointIndex + 1}`;
       } else {
         // All checkpoints passed, target is finish line
@@ -848,6 +869,76 @@ export default function RaceView({
       setDistanceToNextTarget(distanceInMeters);
     }
   };
+
+  // Initialize multiplayer connection
+  useEffect(() => {
+    if (!partyId || !userData.id) return;
+
+    // Set up event handlers
+    multiplayerConnection.onNewPartyMember = (message) => {
+      console.log(`New player joined: ${message.name}`);
+    };
+
+    multiplayerConnection.onDisconnect = (userId) => {
+      console.log(`Player disconnected: ${userId}`);
+      setOtherPlayers((prev) => {
+        const newPlayers = new Map(prev);
+        newPlayers.delete(userId);
+        return newPlayers;
+      });
+    };
+
+    multiplayerConnection.onPositionUpdate = (userId, position, rotation) => {
+      setOtherPlayers((prev) => {
+        const newPlayers = new Map(prev);
+        const playerName =
+          multiplayerConnection.partyMembers.get(userId) || `Player ${userId}`;
+        newPlayers.set(userId, {
+          id: userId,
+          position,
+          rotation,
+          name: playerName,
+        });
+        return newPlayers;
+      });
+    };
+
+    // Connect to WebSocket server
+    multiplayerConnection.connect(userData.id, partyId);
+
+    // Cleanup function
+    return () => {
+      multiplayerConnection.disconnect();
+    };
+  }, [partyId, userData.id]);
+
+  // Send position updates to other players
+  useEffect(() => {
+    if (!multiplayerConnection.isConnected || !raceStarted) return;
+
+    const sendPositionInterval = setInterval(() => {
+      const { carPosition, carHeading } = carPhysics.current;
+
+      if (!carPosition) return;
+
+      // Convert position and heading to the format expected by the server
+      const position = {
+        x: carPosition[0],
+        y: carPhysics.current.getElevation() || 0,
+        z: carPosition[1],
+      };
+
+      const rotation = {
+        yaw: (carHeading * 180) / Math.PI,
+        pitch: 0, // Could calculate from terrain
+        roll: 0, // Could calculate from terrain
+      };
+
+      multiplayerConnection.sendPosition(position, rotation);
+    }, 100); // Send updates 10 times per second
+
+    return () => clearInterval(sendPositionInterval);
+  }, [raceStarted]);
 
   useEffect(() => {
     // Initialize map
@@ -955,7 +1046,7 @@ export default function RaceView({
           // Load primary car model
           const loader = new GLTFLoader();
           loader.load(
-            "./models/low_poly_nissan_gtr.glb",
+            "/models/low_poly_nissan_gtr.glb",
             (gltf) => {
               this.carModel = gltf.scene;
               this.carModel.scale.set(1, 1, 1);
@@ -972,9 +1063,34 @@ export default function RaceView({
               carPhysics.current.modelLoaded = true;
               setModelLoaded(true);
             },
-            undefined,
+            (xhr) => {
+              // Loading progress callback (optional)
+              const progress = (xhr.loaded / xhr.total) * 100;
+              console.log(`Car model loading: ${Math.round(progress)}%`);
+            },
             (error) => {
               console.error("Error loading car model:", error);
+              // Create a simple car placeholder instead of failing
+              const geometry = new THREE.BoxGeometry(1, 0.5, 2);
+              const material = new THREE.MeshStandardMaterial({
+                color: 0x3080ff,
+                emissive: 0x1040a0,
+                metalness: 0.8,
+                roughness: 0.2,
+              });
+              this.carModel = new THREE.Mesh(geometry, material);
+
+              // Add simple details to make it look like a car
+              const roof = new THREE.Mesh(
+                new THREE.BoxGeometry(0.8, 0.3, 1),
+                material
+              );
+              roof.position.set(0, 0.4, -0.2);
+              this.carModel.add(roof);
+
+              this.scene.add(this.carModel);
+              carPhysics.current.modelLoaded = true;
+              setModelLoaded(true);
             }
           );
 
@@ -1118,18 +1234,124 @@ export default function RaceView({
         },
       });
 
+      // Add custom layer for multiplayer vehicles
+      map.addLayer({
+        id: "multiplayer-vehicles",
+        type: "custom",
+        renderingMode: "3d",
+
+        onAdd: function (map, gl) {
+          this.camera = new THREE.Camera();
+          this.scene = new THREE.Scene();
+
+          // Lights
+          const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+          this.scene.add(ambientLight);
+
+          const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+          dirLight.position.set(0, 5, 5).normalize();
+          this.scene.add(dirLight);
+
+          // Renderer
+          this.renderer = new THREE.WebGLRenderer({
+            canvas: map.getCanvas(),
+            context: gl,
+            antialias: false,
+          });
+          this.renderer.autoClear = false;
+        },
+
+        render: function (gl, matrix) {
+          // Skip if no other players
+          if (otherPlayers.size === 0) return;
+
+          // Update position of all multiplayer vehicles
+          otherPlayers.forEach((player) => {
+            // Skip rendering self
+            if (player.id === userData.id) return;
+
+            // Get player position in mercator coordinates
+            const merc = mapboxgl.MercatorCoordinate.fromLngLat(
+              [player.position.x, player.position.z],
+              player.position.y
+            );
+
+            // Scale factor
+            const modelScale = merc.meterInMercatorCoordinateUnits();
+
+            // Create transform matrix
+            let modelMatrix = new THREE.Matrix4();
+
+            // Position
+            const translateMatrix = new THREE.Matrix4().makeTranslation(
+              merc.x,
+              merc.y,
+              merc.z
+            );
+
+            // Scale
+            const scaleMatrix = new THREE.Matrix4().makeScale(
+              modelScale,
+              modelScale,
+              modelScale
+            );
+
+            // Rotation - convert yaw to radians
+            const yawRadians = (player.rotation.yaw * Math.PI) / 180;
+            const rotationMatrix = new THREE.Matrix4().makeRotationZ(
+              yawRadians
+            );
+
+            // Upright orientation
+            const uprightMatrix = new THREE.Matrix4().makeRotationAxis(
+              new THREE.Vector3(1, 0, 0),
+              Math.PI / 2
+            );
+
+            // Combine transformations
+            modelMatrix
+              .multiply(translateMatrix)
+              .multiply(scaleMatrix)
+              .multiply(rotationMatrix)
+              .multiply(uprightMatrix);
+
+            // Update mesh
+            if (multiplayerVehiclesRef.current.has(player.id)) {
+              const vehicle = multiplayerVehiclesRef.current.get(player.id);
+              vehicle.matrix.copy(modelMatrix);
+              vehicle.matrixAutoUpdate = false;
+            } else {
+              // Create placeholder for now (actual model would be better)
+              const geometry = new THREE.BoxGeometry(1, 0.5, 2);
+              const material = new THREE.MeshStandardMaterial({
+                color: 0xff4040,
+                metalness: 0.7,
+                roughness: 0.3,
+              });
+              const vehicleMesh = new THREE.Mesh(geometry, material);
+              vehicleMesh.matrix.copy(modelMatrix);
+              vehicleMesh.matrixAutoUpdate = false;
+
+              this.scene.add(vehicleMesh);
+              multiplayerVehiclesRef.current.set(player.id, vehicleMesh);
+            }
+          });
+
+          // Render the scene with all multiplayer vehicles
+          const projectionMatrix = new THREE.Matrix4().fromArray(matrix);
+          this.camera.projectionMatrix = projectionMatrix;
+          this.renderer.resetState();
+          this.renderer.render(this.scene, this.camera);
+
+          map.triggerRepaint();
+        },
+      });
+
       setIsMapLoaded(true);
     });
 
     return () => map.remove();
-  }, [
-    initialPosition,
-    defaultFinishPosition,
-    checkpoints,
-    lightPreset,
-    weather,
-    timeOfDay,
-  ]);
+  }, [lightPreset, otherPlayers]);
 
   // Keyboard input
   useEffect(() => {
@@ -1348,6 +1570,30 @@ export default function RaceView({
     return () => cancelAnimationFrame(animationId);
   }, [isMapLoaded, raceStarted, routeCoordinates, offTrackWarning]);
 
+  // Add players list UI to the race view
+  const renderPlayersList = () => {
+    // Filter out disconnected players and self
+    const players = Array.from(
+      multiplayerConnection.partyMembers.entries()
+    ).filter(([id]) => id !== userData.id);
+
+    if (players.length === 0) return null;
+
+    return (
+      <div className="absolute top-4 right-4 bg-black bg-opacity-70 p-2 rounded-lg text-white">
+        <h3 className="text-sm font-bold mb-1">Other Racers</h3>
+        <ul className="text-xs">
+          {players.map(([id, name]) => (
+            <li key={id} className="flex items-center my-1">
+              <div className="w-2 h-2 rounded-full bg-green-500 mr-2"></div>
+              {name}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  };
+
   return (
     <div className="w-full h-full relative">
       {/* Add animation style to head */}
@@ -1409,7 +1655,7 @@ export default function RaceView({
           )}
 
           {/* Checkpoint progress indicator */}
-          {checkpoints && checkpoints.length > 0 && (
+          {formattedCheckpoints && formattedCheckpoints.length > 0 && (
             <div className="mt-2">
               <div className="text-xs mb-1">Checkpoints:</div>
               <div className="flex gap-2">
@@ -1586,6 +1832,9 @@ export default function RaceView({
           </div>
         </div>
       )}
+
+      {/* Multiplayer players list */}
+      {renderPlayersList()}
     </div>
   );
 }
