@@ -1,6 +1,13 @@
 # World Racers
 Race around any real city in the world, in seconds
 
+Our **WINNING** submission to [Bitcamp 2025](https://bitcamp2025.devpost.com/) at University of Maryland. See [here](https://devpost.com/software/world-racing) for more info.
+
+Authors:
+- [Cristy Chirolde](https://github.com/CristyC123)
+- [Mark Bruckert](https://github.com/mbruckert)
+- [Warren Snipes](https://github.com/LockedThread)
+
 ## Inspiration
 
 We built World Racing to bring back the joy of exploration through a modern lens. Inspired by our childhood memories of games like Mario Kart and the excitement of zooming through vibrant maps, we wanted to recreate that thrill—except in the real world. With so many young people wanting to travel but facing constraints like time or money, we thought: what if you could race through the streets of Tokyo, Miami, or Paris from your browser?
