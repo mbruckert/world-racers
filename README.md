@@ -1,6 +1,13 @@
 # World Racers
 Race around any real city in the world, in seconds
 
+Our **WINNING** submission to [Bitcamp 2025](https://bitcamp2025.devpost.com/) at University of Maryland. See [here](https://devpost.com/software/world-racing) for more info.
+
+Authors:
+- [Cristy Chirolde](https://github.com/CristyC123)
+- [Mark Bruckert](https://github.com/mbruckert)
+- [Warren Snipes](https://github.com/LockedThread)
+
 ## Inspiration
 
 We built World Racing to bring back the joy of exploration through a modern lens. Inspired by our childhood memories of games like Mario Kart and the excitement of zooming through vibrant maps, we wanted to recreate that thrill—except in the real world. With so many young people wanting to travel but facing constraints like time or money, we thought: what if you could race through the streets of Tokyo, Miami, or Paris from your browser?
@@ -10,10 +17,6 @@ On a personal level, Mark has always struggled with navigation, often making wro
 Also? It's just really fun. With multiplayer support, you can race against your friends and explore new places at the same time!
 
 ![GIF of our project in action](https://worldracers.warrensnipes.dev/EiffelTower.gif)
-
-## What it does
-
-World Racing lets you pick any real-world location and instantly create a racecourse through it. You define the start, finish, and checkpoints, and we build a fully interactive 3D driving experience around it. Before the race starts, you're treated to a cinematic drone flyover of the route, complete with roads, trees, oceans, landmarks, and more. The driving experience includes a 3rd-person camera view that follows your car, with a working speedometer, compass, and visual cues for landmarks and turns. It’s part game, part travel, part simulation—accessible from your browser in seconds.
 
 ## How we built it
 
