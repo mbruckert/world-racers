@@ -18,10 +18,6 @@ Also? It's just really fun. With multiplayer support, you can race against your 
 
 ![GIF of our project in action](https://worldracers.warrensnipes.dev/EiffelTower.gif)
 
-## What it does
-
-World Racing lets you pick any real-world location and instantly create a racecourse through it. You define the start, finish, and checkpoints, and we build a fully interactive 3D driving experience around it. Before the race starts, you're treated to a cinematic drone flyover of the route, complete with roads, trees, oceans, landmarks, and more. The driving experience includes a 3rd-person camera view that follows your car, with a working speedometer, compass, and visual cues for landmarks and turns. It’s part game, part travel, part simulation—accessible from your browser in seconds.
-
 ## How we built it
 
 We used Mapbox GL JS to render realistic 3D maps and terrain, and Three.js to handle the custom 3D car physics and visuals. The app itself is built in React with TailwindCSS for a clean, responsive UI. On the backend, we used Rust with the Axum web framework for high-performance APIs, and PostgreSQL with SeaORM to store and serve course data and user-generated maps. All components work together seamlessly to generate a real-world map, overlay the chosen route, and simulate a racing experience with proper camera and collision logic. We also utilized websockets for real-time, live multiplayer.
